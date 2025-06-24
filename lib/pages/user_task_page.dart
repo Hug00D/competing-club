@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:intl/intl.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 class UserTaskPage extends StatefulWidget {
   const UserTaskPage({super.key});
@@ -13,6 +14,50 @@ class _UserTaskPageState extends State<UserTaskPage> {
   final FlutterTts flutterTts = FlutterTts();
   final Map<String, List<String>> taskMap = {};
   DateTime selectedDate = DateTime.now();
+
+  late stt.SpeechToText _speech;
+  bool _isListening = false;
+  String _spokenText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _speech = stt.SpeechToText();
+  }
+
+  void _listen() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (val) => print('狀態: $val'),
+        onError: (val) => print('錯誤: $val'),
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          localeId: 'zh_TW',
+          onResult: (val) {
+            setState(() {
+              _spokenText = val.recognizedWords;
+            });
+
+            if (val.finalResult && _spokenText.isNotEmpty) {
+              final key = DateFormat('yyyy-MM-dd').format(selectedDate);
+              setState(() {
+                taskMap.putIfAbsent(key, () => []);
+                taskMap[key]!.add(_spokenText);
+                _spokenText = '';
+                _isListening = false;
+                _speech.stop();
+              });
+            }
+          },
+        );
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
 
   Future<void> _speak(String text) async {
     await flutterTts.setLanguage("zh-TW");
@@ -114,11 +159,22 @@ class _UserTaskPageState extends State<UserTaskPage> {
           );
         },
       ),
-      floatingActionButton: selectedDate.isBefore(DateTime.now().subtract(const Duration(days: 1)))
-          ? null
-          : FloatingActionButton(
-        onPressed: _addTask,
-        child: const Icon(Icons.add),
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'mic',
+            onPressed: _listen,
+            child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+          ),
+          const SizedBox(width: 12),
+          if (!selectedDate.isBefore(DateTime.now().subtract(const Duration(days: 1))))
+            FloatingActionButton(
+              heroTag: 'add',
+              onPressed: _addTask,
+              child: const Icon(Icons.add),
+            ),
+        ],
       ),
     );
   }
