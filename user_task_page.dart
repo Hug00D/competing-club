@@ -1,3 +1,4 @@
+// Dart Flutter: Gemini 1.5 Flash 語音任務解析版本
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -15,7 +16,8 @@ class UserTaskPage extends StatefulWidget {
 class _UserTaskPageState extends State<UserTaskPage> {
   final stt.SpeechToText _speech = stt.SpeechToText();
   final FlutterTts flutterTts = FlutterTts();
-  final Map<String, List<String>> taskMap = {};
+
+  final Map<String, List<Map<String, String>>> taskMap = {};
   DateTime selectedDate = DateTime.now();
   bool _isListening = false;
 
@@ -28,7 +30,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
           if (result.finalResult && result.recognizedWords.isNotEmpty) {
             _speech.stop();
             setState(() => _isListening = false);
-            await _parseWitAi(result.recognizedWords);
+            await _parseGeminiAI(result.recognizedWords);
           }
         });
       }
@@ -38,47 +40,80 @@ class _UserTaskPageState extends State<UserTaskPage> {
     }
   }
 
-  Future<void> _parseWitAi(String input) async {
-    const token = "XBXOUHMJNTS52AG6OWBLV6GQVAT2DPHD";
-    final response = await http.get(
-      Uri.parse("https://api.wit.ai/message?v=20230601&q=${Uri.encodeComponent(input)}"),
-      headers: {
-        "Authorization": "Bearer $token",
-        "Content-Type": "application/json",
-      },
+  Future<void> _parseGeminiAI(String input) async {
+    const apiKey = "AIzaSyAHwbl6rDrK243UPkF0ENiOPF9b_A_TB1w";
+    final url = Uri.parse(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey");
+
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final prompt = """
+今天是 $today，請從這句話中分析出任務內容與時間，輸出 JSON 格式如下：
+{
+  "task": "去洗澡",
+  "date": "2025-06-27",
+  "time": "21:00"
+}
+
+語句：「$input」
+請直接給我 JSON 回應。
+""";
+
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "contents": [
+          {
+            "parts": [
+              {"text": prompt}
+            ]
+          }
+        ]
+      }),
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final entities = data['entities'] ?? {};
-      debugPrint(jsonEncode(entities));
+      try {
+        final raw = jsonDecode(response.body);
+        final text = raw['candidates'][0]['content']['parts'][0]['text'];
+        final cleanJson = _extractJsonFromText(text);
+        final parsed = jsonDecode(cleanJson);
 
-      String? task = data['text'];
-      String key = DateFormat('yyyy-MM-dd').format(selectedDate);
-      const datetimeKey = r'wit$datetime:datetime';
+        final task = parsed['task'] ?? input;
+        final dateStr = parsed['date'];
+        final timeStr = parsed['time'] ?? "";
 
-      if (entities.containsKey(datetimeKey)) {
-        final datetimeEntity = entities[datetimeKey][0];
-        final rawVal = datetimeEntity['value'] ?? datetimeEntity['from']?['value'];
-        if (rawVal is String && rawVal.length >= 10) {
-          key = rawVal.substring(0, 10); // ✅ 忽略時區，取字面日期
+        if (task != null && dateStr != null) {
+          final key = dateStr;
+          setState(() {
+            taskMap.putIfAbsent(key, () => []);
+            taskMap[key]!.add({
+              'task': task,
+              'time': timeStr,
+            });
+            taskMap[key]!.sort((a, b) => (a['time'] ?? '').compareTo(b['time'] ?? ''));
+          });
+          await _speak("已幫你新增「$task」，在 $key。");
+        } else {
+          await _speak("我沒能解析出任務內容。");
         }
-      }
-
-      if (task != null && task.isNotEmpty) {
-        setState(() {
-          taskMap.putIfAbsent(key, () => []);
-          taskMap[key]!.add(task);
-        });
-
-        await _speak("已幫你新增「$task」，在 $key。");
-      } else {
-        await _speak("抱歉，我沒聽清楚要做什麼事。");
+      } catch (e) {
+        debugPrint("解析 Gemini 回傳失敗：$e");
+        await _speak("AI 回應解析失敗。");
       }
     } else {
-      debugPrint("Wit.ai 回傳錯誤: ${response.body}");
-      await _speak("語音辨識發生錯誤。");
+      debugPrint("Gemini 回傳錯誤: ${response.body}");
+      await _speak("AI 回應發生錯誤。");
     }
+  }
+
+  String _extractJsonFromText(String text) {
+    final regex = RegExp(r'```json\s*([\s\S]*?)\s*```', multiLine: true);
+    final match = regex.firstMatch(text);
+    if (match != null && match.groupCount >= 1) {
+      return match.group(1)!;
+    }
+    return text.trim();
   }
 
   Future<void> _speak(String text) async {
@@ -102,7 +137,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
   }
 
   void _addTask() async {
-    final result = await showDialog<String>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (context) {
         final controller = TextEditingController();
@@ -118,7 +153,10 @@ class _UserTaskPageState extends State<UserTaskPage> {
               child: const Text('取消'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, controller.text),
+              onPressed: () => Navigator.pop(context, {
+                'task': controller.text,
+                'time': '',
+              }),
               child: const Text('新增'),
             ),
           ],
@@ -126,11 +164,12 @@ class _UserTaskPageState extends State<UserTaskPage> {
       },
     );
 
-    if (result != null && result.isNotEmpty) {
+    if (result != null && result['task']!.isNotEmpty) {
       final key = DateFormat('yyyy-MM-dd').format(selectedDate);
       setState(() {
         taskMap.putIfAbsent(key, () => []);
         taskMap[key]!.add(result);
+        taskMap[key]!.sort((a, b) => (a['time'] ?? '').compareTo(b['time'] ?? ''));
       });
     }
   }
@@ -162,15 +201,31 @@ class _UserTaskPageState extends State<UserTaskPage> {
           : ListView.builder(
         itemCount: tasks.length,
         itemBuilder: (context, index) {
+          final taskObj = tasks[index];
+          final taskText = taskObj['task'] ?? '';
+          final timeText = taskObj['time'] ?? '';
+
           return Card(
             margin: const EdgeInsets.all(12),
             child: ListTile(
-              title: Text(tasks[index]),
-              onTap: () => _speak(tasks[index]),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete),
-                onPressed: () => _deleteTask(index),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(taskText)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (timeText.isNotEmpty)
+                        Text(timeText, style: const TextStyle(color: Colors.grey)),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () => _deleteTask(index),
+                      ),
+                    ],
+                  ),
+                ],
               ),
+              onTap: () => _speak(taskText),
             ),
           );
         },
