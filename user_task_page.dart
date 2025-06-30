@@ -1,4 +1,3 @@
-// Dart Flutter: Gemini 1.5 Flash 語音任務解析版本
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -21,16 +20,56 @@ class _UserTaskPageState extends State<UserTaskPage> {
   DateTime selectedDate = DateTime.now();
   bool _isListening = false;
 
-  Future<void> _listen() async {
+  Future<void> _listen(Function(String task, String? startTime, String? endTime, String? date, String? type) onResult) async {
     if (!_isListening) {
       bool available = await _speech.initialize();
       if (available) {
         setState(() => _isListening = true);
         _speech.listen(onResult: (result) async {
-          if (result.finalResult && result.recognizedWords.isNotEmpty) {
-            _speech.stop();
+          try {
+            if (result.finalResult && result.recognizedWords.isNotEmpty) {
+              _speech.stop();
+              setState(() => _isListening = false);
+
+
+              final parsed = await _parseGeminiAI(result.recognizedWords);
+
+              if (parsed != null) {
+                debugPrint("✅ Gemini 分析成功：$parsed");
+
+                final now = DateTime.now();
+                final parsedDateStr = parsed['date'];
+                final parsedStartStr = parsed['start'];
+                if (parsedDateStr != null && parsedStartStr != null) {
+                  try {
+                    final parsedDate = DateFormat('yyyy-MM-dd').parse(parsedDateStr);
+                    final parsedTime = DateFormat('HH:mm').parse(parsedStartStr);
+                    final combined = DateTime(parsedDate.year, parsedDate.month, parsedDate.day, parsedTime.hour, parsedTime.minute);
+
+                    if (combined.isBefore(now)) {
+                      final nextDay = parsedDate.add(const Duration(days: 1));
+                      parsed['date'] = DateFormat('yyyy-MM-dd').format(nextDay);
+                      debugPrint("🕒 時間已過，自動調整為隔天：${parsed['date']}");
+                    }
+                  } catch (e) {
+                    debugPrint("⚠️ 時間修正失敗：$e");
+                  }
+                }
+                
+                onResult(
+                  parsed['task'] ?? '',
+                  parsed['start'],
+                  parsed['end'],
+                  parsed['date'],
+                  parsed['type'],
+                );
+              } else {
+                debugPrint("❌ Gemini 回傳為 null");
+              }
+            }
+          } catch (e) {
+            debugPrint("⚠️ 語音處理錯誤：$e");
             setState(() => _isListening = false);
-            await _parseGeminiAI(result.recognizedWords);
           }
         });
       }
@@ -40,145 +79,165 @@ class _UserTaskPageState extends State<UserTaskPage> {
     }
   }
 
-  Future<void> _parseGeminiAI(String input) async {
-    const apiKey = "AIzaSyAHwbl6rDrK243UPkF0ENiOPF9b_A_TB1w";
-    final url = Uri.parse(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey");
-
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  Future<Map<String, String>?> _parseGeminiAI(String input) async {
+    final today = DateFormat('yyyy-MM-dd').format(selectedDate);
     final prompt = """
 今天是 $today，請從這句話中分析出任務內容與時間，輸出 JSON 格式如下：
 {
-  "task": "去洗澡",
-  "date": "2025-06-27",
-  "time": "21:00"
+  "task": "吃藥",
+  "start": "14:00",
+  "end": "14:30",
+  "date": "2025-07-01",
+  "type": "醫療"
 }
 
+請根據以下規則判斷任務類型 type：
+- 若語句中提到吃藥、服藥、藥、看醫生，type 請設為 "醫療"
+- 若語句中提到運動、健身、慢跑、散步、伸展，type 請設為 "運動"
+- 若語句中提到吃飯、喝水、喝飲料、吃午餐、吃早餐、吃晚餐，type 請設為 "飲食"
+- 若語句中沒有明確類型，type 請設為 "提醒"
 語句：「$input」
 請直接給我 JSON 回應。
 """;
 
+    final url = Uri.parse(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyDlBNZE4HcGwkQTJOUwXuN2i2xw67Egf_U",
+    );
+
     final response = await http.post(
       url,
       headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
+      body: json.encode({
         "contents": [
-          {
-            "parts": [
-              {"text": prompt}
-            ]
-          }
+          {"parts": [{"text": prompt}]}
         ]
       }),
     );
 
     if (response.statusCode == 200) {
       try {
-        final raw = jsonDecode(response.body);
+        final raw = json.decode(response.body);
         final text = raw['candidates'][0]['content']['parts'][0]['text'];
+
+
         final cleanJson = _extractJsonFromText(text);
-        final parsed = jsonDecode(cleanJson);
+        final decoded = json.decode(cleanJson);
 
-        final task = parsed['task'] ?? input;
-        final dateStr = parsed['date'];
-        final timeStr = parsed['time'] ?? "";
+        final safeMap = <String, String>{};
+        decoded.forEach((key, value) {
+          if (value != null) {
+            safeMap[key] = value.toString();
+          }
+        });
 
-        if (task != null && dateStr != null) {
-          final key = dateStr;
-          setState(() {
-            taskMap.putIfAbsent(key, () => []);
-            taskMap[key]!.add({
-              'task': task,
-              'time': timeStr,
-            });
-            taskMap[key]!.sort((a, b) => (a['time'] ?? '').compareTo(b['time'] ?? ''));
-          });
-          await _speak("已幫你新增「$task」，在 $key。");
-        } else {
-          await _speak("我沒能解析出任務內容。");
-        }
+        return safeMap;
       } catch (e) {
-        debugPrint("解析 Gemini 回傳失敗：$e");
-        await _speak("AI 回應解析失敗。");
+        debugPrint("❌ Gemini 解析失敗：$e");
       }
     } else {
-      debugPrint("Gemini 回傳錯誤: ${response.body}");
-      await _speak("AI 回應發生錯誤。");
+      debugPrint("❌ Gemini API 錯誤：${response.statusCode}");
     }
+
+    return null;
   }
+
 
   String _extractJsonFromText(String text) {
-    final regex = RegExp(r'```json\s*([\s\S]*?)\s*```', multiLine: true);
+    final regex = RegExp(r'```json\s*([\s\S]*?)\s*```');
     final match = regex.firstMatch(text);
-    if (match != null && match.groupCount >= 1) {
-      return match.group(1)!;
+    return match != null ? match.group(1)!.trim() : text.trim();
+  }
+
+  Future<void> _addTask() async {
+    Map<String, String>? aiResult;
+
+    // 預先建立對話框，避免 context 跨 async
+    final dialog = TaskDialog(
+      listenFunction: _listen,
+      initialData: aiResult,
+    );
+
+    // 使用 builder: (dialogContext) => dialog 解掉 warning
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogContext) => dialog,
+    );
+
+    if (!mounted) return;
+
+    if (result != null && result['task']!.isNotEmpty) {
+      String start = result['start'] ?? '';
+      String end = result['end'] ?? '';
+
+      if (start.isEmpty && end.isNotEmpty) {
+        final endTime = DateFormat("HH:mm").parse(end);
+        start = DateFormat("HH:mm").format(endTime.subtract(const Duration(minutes: 30)));
+      } else if (end.isEmpty && start.isNotEmpty) {
+        final startTime = DateFormat("HH:mm").parse(start);
+        end = DateFormat("HH:mm").format(startTime.add(const Duration(minutes: 30)));
+      }
+
+      final dateKey = result['date'] ?? DateFormat('yyyy-MM-dd').format(selectedDate);
+      final type = result['type'] ?? '提醒'; // 如果沒傳回 type，預設為「提醒」
+      setState(() {
+        taskMap.putIfAbsent(dateKey, () => []);
+        taskMap[dateKey]!.add({'task': result['task']!, 'time': start, 'end': end, 'type': type});
+        taskMap[dateKey]!.sort((a, b) => a['time']!.compareTo(b['time']!));
+      });
     }
-    return text.trim();
+  }
+  void _deleteTask(int index) {
+    final key = DateFormat('yyyy-MM-dd').format(selectedDate);
+    setState(() => taskMap[key]!.removeAt(index));
   }
 
-  Future<void> _speak(String text) async {
-    await flutterTts.setLanguage("zh-TW");
-    await flutterTts.setPitch(1.0);
-    await flutterTts.speak(text);
-  }
-
-  void _pickDate() async {
-    final DateTime? picked = await showDatePicker(
+  void _pickDateWithCalendar(BuildContext context) async {
+    final picked = await showDatePicker(
       context: context,
       initialDate: selectedDate,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (picked != null && picked != selectedDate) {
+    if (picked != null) {
       setState(() {
         selectedDate = picked;
       });
     }
   }
 
-  void _addTask() async {
-    final result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) {
-        final controller = TextEditingController();
-        return AlertDialog(
-          title: const Text('新增任務'),
-          content: TextField(
-            controller: controller,
-            decoration: const InputDecoration(hintText: '輸入任務內容'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, {
-                'task': controller.text,
-                'time': '',
-              }),
-              child: const Text('新增'),
-            ),
-          ],
-        );
-      },
-    );
 
-    if (result != null && result['task']!.isNotEmpty) {
-      final key = DateFormat('yyyy-MM-dd').format(selectedDate);
-      setState(() {
-        taskMap.putIfAbsent(key, () => []);
-        taskMap[key]!.add(result);
-        taskMap[key]!.sort((a, b) => (a['time'] ?? '').compareTo(b['time'] ?? ''));
-      });
+  void _jumpToToday() {
+    setState(() => selectedDate = DateTime.now());
+  }
+
+  Color _getColorByType(String? type) {
+    switch (type) {
+      case '醫療':
+        return Colors.teal.shade100;
+      case '運動':
+        return Colors.orange.shade100;
+      case '提醒':
+        return Colors.yellow.shade100;
+      case '飲食':
+        return Colors.pink.shade100;
+      default:
+        return Colors.grey.shade200;
     }
   }
 
-  void _deleteTask(int index) {
-    final key = DateFormat('yyyy-MM-dd').format(selectedDate);
-    setState(() {
-      taskMap[key]!.removeAt(index);
-    });
+  Icon _getIconByType(String? type) {
+    switch (type) {
+      case '醫療':
+        return const Icon(Icons.medication, color: Colors.teal);
+      case '運動':
+        return const Icon(Icons.fitness_center, color: Colors.orange);
+      case '提醒':
+        return const Icon(Icons.alarm, color: Colors.amber);
+      case '飲食':
+        return const Icon(Icons.restaurant, color: Colors.pink);
+      default:
+        return const Icon(Icons.task, color: Colors.grey);
+    }
   }
 
   @override
@@ -187,67 +246,339 @@ class _UserTaskPageState extends State<UserTaskPage> {
     final tasks = taskMap[key] ?? [];
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('任務 (${DateFormat('yyyy/MM/dd').format(selectedDate)})'),
-        actions: [
-          IconButton(
-            onPressed: _pickDate,
-            icon: const Icon(Icons.calendar_today),
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: Column(
+        children: [
+          const SizedBox(height: 40),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.calendar_today, color: Colors.black87),
+                  onPressed: () => _pickDateWithCalendar(context),
+                ),
+                const Text(
+                  '語音任務清單',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+                TextButton(
+                  onPressed: _jumpToToday,
+                  child: const Text("今日", style: TextStyle(color: Colors.blueGrey)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildDateSelector(),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                itemCount: 24,
+                itemBuilder: (context, hour) {
+                  final paddedHour = hour.toString().padLeft(2, '0');
+                  final hourStr = "$paddedHour:00";
+                  final taskForHour = tasks
+                      .where((t) => t['time']?.startsWith(paddedHour) ?? false)
+                      .toList();
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          hourStr,
+                          style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        if (taskForHour.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6),
+                            child: Text('— 無任務 —', style: TextStyle(color: Colors.grey)),
+                          ),
+                        ...taskForHour.map((t) => Card(
+                          color: _getColorByType(t['type']),
+                          elevation: 3,
+                          margin: const EdgeInsets.only(top: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            onTap: () => flutterTts.speak("${t['task']}，從 ${t['time']} 到 ${t['end']}"),
+                            leading: _getIconByType(t['type']),
+                            title: Text(
+                              t['task'] ?? '',
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87),
+                            ),
+                            subtitle: Text(
+                              '${t['time']} ~ ${t['end']}',
+                              style: const TextStyle(color: Colors.black54),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.redAccent),
+                              onPressed: () => _deleteTask(tasks.indexOf(t)),
+                            ),
+                          ),
+                        )),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
         ],
       ),
-      body: tasks.isEmpty
-          ? const Center(child: Text('尚無任務'))
-          : ListView.builder(
-        itemCount: tasks.length,
-        itemBuilder: (context, index) {
-          final taskObj = tasks[index];
-          final taskText = taskObj['task'] ?? '';
-          final timeText = taskObj['time'] ?? '';
-
-          return Card(
-            margin: const EdgeInsets.all(12),
-            child: ListTile(
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(child: Text(taskText)),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (timeText.isNotEmpty)
-                        Text(timeText, style: const TextStyle(color: Colors.grey)),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _deleteTask(index),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              onTap: () => _speak(taskText),
-            ),
-          );
-        },
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.black,
+        onPressed: _addTask,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
-      floatingActionButton: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+    );
+  }
+
+  Widget _buildDateSelector() {
+    final weekday = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+    final dayStr = DateFormat('dd').format(selectedDate);
+    final monthStr = DateFormat('MM').format(selectedDate);
+    final weekStr = weekday[selectedDate.weekday % 7];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          if (!selectedDate.isBefore(DateTime.now().subtract(const Duration(days: 1))))
-            FloatingActionButton(
-              heroTag: 'mic',
-              onPressed: _listen,
-              child: Icon(_isListening ? Icons.mic : Icons.mic_none),
+          Container(
+            width: 260,
+            height: 260,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
             ),
-          const SizedBox(width: 12),
-          if (!selectedDate.isBefore(DateTime.now().subtract(const Duration(days: 1))))
-            FloatingActionButton(
-              heroTag: 'add',
-              onPressed: _addTask,
-              child: const Icon(Icons.add),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('$monthStr 月', style: const TextStyle(fontSize: 22, color: Colors.black87)),
+                const SizedBox(height: 4),
+                Text(dayStr, style: const TextStyle(fontSize: 72, fontWeight: FontWeight.bold, color: Colors.black)),
+                const SizedBox(height: 4),
+                Text(weekStr, style: const TextStyle(fontSize: 22, color: Colors.black87)),
+              ],
             ),
+          ),
+          Positioned(
+            left: 10,
+            child: Column(
+              children: [
+                IconButton(
+                  iconSize: 40,
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
+                  onPressed: () => setState(() => selectedDate = selectedDate.subtract(const Duration(days: 1))),
+                ),
+                const Text('上', style: TextStyle(fontSize: 16, color: Colors.black54)),
+              ],
+            ),
+          ),
+          Positioned(
+            right: 10,
+            child: Column(
+              children: [
+                IconButton(
+                  iconSize: 40,
+                  icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.black87),
+                  onPressed: () => setState(() => selectedDate = selectedDate.add(const Duration(days: 1))),
+                ),
+                const Text('下', style: TextStyle(fontSize: 16, color: Colors.black54)),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+
+
 }
+
+class TaskDialog extends StatefulWidget {
+  final Future<void> Function(Function(String, String?, String?, String?, String?)) listenFunction;
+  final Map<String, String>? initialData;
+
+  const TaskDialog({
+    required this.listenFunction,
+    this.initialData,
+    super.key,
+  });
+
+  @override
+  State<TaskDialog> createState() => _TaskDialogState();
+}
+
+class _TaskDialogState extends State<TaskDialog> {
+  final TextEditingController _controller = TextEditingController();
+  String? startTime;
+  String? endTime;
+  String? taskType;
+  DateTime taskDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    final data = widget.initialData;
+    if (data != null) {
+      _controller.text = data['task'] ?? '';
+      startTime = data['start'];
+      endTime = data['end'];
+      taskType = data['type'];
+      if (data['date'] != null && data['date']!.isNotEmpty) {
+        try {
+          taskDate = DateFormat('yyyy-MM-dd').parse(data['date']!);
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null) {
+      final now = DateTime.now();
+      final selected = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+      final formatted = DateFormat('HH:mm').format(selected);
+      setState(() {
+        if (isStart) {
+          startTime = formatted;
+        } else {
+          endTime = formatted;
+        }
+      });
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: taskDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setState(() => taskDate = picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('新增任務'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            decoration: const InputDecoration(labelText: '任務內容'),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => _pickTime(true),
+                  child: Text(startTime != null ? '開始: $startTime' : '選擇開始時間'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextButton(
+                  onPressed: () => _pickTime(false),
+                  child: Text(endTime != null ? '結束: $endTime' : '選擇結束時間'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 18),
+              const SizedBox(width: 6),
+              TextButton(
+                onPressed: _pickDate,
+                child: Text(DateFormat('yyyy-MM-dd').format(taskDate)),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.mic),
+          onPressed: () async {
+            await widget.listenFunction((task, start, end, date, type) async {
+              String? finalStart = start?.trim();
+              String? finalEnd = end?.trim();
+
+              // 自動補結束時間
+              if ((finalEnd == null || finalEnd.isEmpty) && finalStart != null && finalStart.isNotEmpty) {
+                try {
+                  final startDt = DateFormat("HH:mm").parse(finalStart);
+                  finalEnd = DateFormat("HH:mm").format(startDt.add(const Duration(minutes: 30)));
+                } catch (e) {
+                  debugPrint('⚠️ 時間解析失敗: $e');
+                  finalStart = null;
+                  finalEnd = null;
+                }
+              }
+
+              // 若無 start → 不進行填寫，避免錯誤
+              if (finalStart == null || finalStart.isEmpty) {
+                await FlutterTts().speak("任務內容不完整，請再說一次");
+                return;
+              }
+
+              await FlutterTts().speak("已幫你新增 $task，從 $finalStart 到 $finalEnd");
+
+              setState(() {
+                _controller.text = task;
+                startTime = finalStart;
+                endTime = finalEnd;
+                taskType = type;
+                if (date != null && date.isNotEmpty) {
+                  try {
+                    taskDate = DateFormat('yyyy-MM-dd').parse(date);
+                  } catch (_) {}
+                }
+              });
+            });
+          },
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, {
+              'task': _controller.text,
+              'start': startTime ?? '',
+              'end': endTime ?? '',
+              'date': DateFormat('yyyy-MM-dd').format(taskDate),
+              'type': taskType ?? '提醒',
+            });
+          },
+          child: const Text('新增'),
+        ),
+      ],
+    );
+  }
+}
+
