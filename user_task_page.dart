@@ -83,26 +83,26 @@ class _UserTaskPageState extends State<UserTaskPage> {
   Future<Map<String, String>?> _parseGeminiAI(String input) async {
     final today = DateFormat('yyyy-MM-dd').format(selectedDate);
     final prompt = """
-      今天是 $today，請從這句話中分析出任務內容與時間，輸出 JSON 格式如下：
-      {
-        "task": "吃藥",
-        "start": "14:00",
-        "end": "14:30",
-        "date": "2025-07-01",
-        "type": "醫療"
-      }
-      
-      請根據以下規則判斷任務類型 type：
-      - 若語句中提到吃藥、服藥、藥、看醫生，type 請設為 "醫療"
-      - 若語句中提到運動、健身、慢跑、散步、伸展，type 請設為 "運動"
-      - 若語句中提到吃飯、喝水、喝飲料、吃午餐、吃早餐、吃晚餐，type 請設為 "飲食"
-      - 若語句中沒有明確類型，type 請設為 "提醒"
-      語句：「$input」
-      請直接給我 JSON 回應。
-      """;
+    今天是 $today，請從這句話中分析出任務內容與時間，輸出 JSON 格式如下：
+    {
+      "task": "吃藥",
+      "start": "14:00",
+      "end": "14:30",
+      "date": "2025-07-01",
+      "type": "醫療"
+    }
+    
+    請根據以下規則判斷任務類型 type：
+    - 若語句中提到吃藥、服藥、藥、看醫生，type 請設為 "醫療"
+    - 若語句中提到運動、健身、慢跑、散步、伸展，type 請設為 "運動"
+    - 若語句中提到吃飯、喝水、喝飲料、吃午餐、吃早餐、吃晚餐、吃宵夜，type 請設為 "飲食"
+    - 若語句中沒有明確類型，type 請設為 "提醒"
+    語句：「$input」
+    請直接給我 JSON 回應。
+  """;
 
     final url = Uri.parse(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyAzSjgqxwyeJkilJKXSj45rMzKG7zUsnEA",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyCSiUQBqYBaWgpxHr37RcuKoaiiUOUfQhs",
     );
 
     final response = await http.post(
@@ -120,7 +120,6 @@ class _UserTaskPageState extends State<UserTaskPage> {
         final raw = json.decode(response.body);
         final text = raw['candidates'][0]['content']['parts'][0]['text'];
 
-
         final cleanJson = _extractJsonFromText(text);
         final decoded = json.decode(cleanJson);
 
@@ -130,6 +129,42 @@ class _UserTaskPageState extends State<UserTaskPage> {
             safeMap[key] = value.toString();
           }
         });
+
+        // 🛠 智能日期修正邏輯
+        if (safeMap.containsKey('date') && safeMap.containsKey('start')) {
+          final now = DateTime.now();
+          final parsedDate = DateTime.tryParse(safeMap['date']!);
+
+          try {
+            final parsedTime = DateFormat('HH:mm').parse(safeMap['start']!);
+            final combined = DateTime(
+              parsedDate!.year,
+              parsedDate.month,
+              parsedDate.day,
+              parsedTime.hour,
+              parsedTime.minute,
+            );
+
+            if (combined.isBefore(now)) {
+              final isUserSpecified = safeMap['date'] != DateFormat('yyyy-MM-dd').format(selectedDate);
+              DateTime newDate;
+
+              if (isUserSpecified) {
+                // 明確指定日期 → 跳下週
+                newDate = parsedDate.add(const Duration(days: 7));
+              } else {
+                // 沒指定 → 跳明天
+                final tomorrow = now.add(const Duration(days: 1));
+                newDate = DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
+              }
+
+              safeMap['date'] = DateFormat('yyyy-MM-dd').format(newDate);
+              debugPrint("🛠 時間已過，自動跳轉日期 → ${safeMap['date']}");
+            }
+          } catch (_) {
+            debugPrint("⚠️ 時間格式解析失敗");
+          }
+        }
 
         return safeMap;
       } catch (e) {
@@ -141,6 +176,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
 
     return null;
   }
+
 
 
   String _extractJsonFromText(String text) {
@@ -289,9 +325,16 @@ class _UserTaskPageState extends State<UserTaskPage> {
                   final paddedHour = hour.toString().padLeft(2, '0');
                   final hourStr = "$paddedHour:00";
                   final now = DateTime.now();
-                  final hourStart = DateTime(now.year, now.month, now.day, hour);
+                  final selectedDateString = DateFormat('yyyy-MM-dd').format(selectedDate);
+                  final todayString = DateFormat('yyyy-MM-dd').format(now);
+
+                  final isBeforeToday = selectedDate.isBefore(DateTime(now.year, now.month, now.day));
+                  final isToday = selectedDateString == todayString;
+
+                  final hourStart = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, hour);
                   final hourEnd = hourStart.add(const Duration(hours: 1));
-                  final isHourPast = now.isAfter(hourEnd);
+
+                  final isHourPast = isBeforeToday || (isToday && now.isAfter(hourEnd));
                   final taskForHour = tasks
                       .where((t) => t['time']?.startsWith(paddedHour) ?? false)
                       .toList();
