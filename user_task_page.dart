@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:intl/intl.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'monthly_overview_page.dart';
 
 class UserTaskPage extends StatefulWidget {
   const UserTaskPage({super.key});
@@ -82,26 +83,26 @@ class _UserTaskPageState extends State<UserTaskPage> {
   Future<Map<String, String>?> _parseGeminiAI(String input) async {
     final today = DateFormat('yyyy-MM-dd').format(selectedDate);
     final prompt = """
-今天是 $today，請從這句話中分析出任務內容與時間，輸出 JSON 格式如下：
-{
-  "task": "吃藥",
-  "start": "14:00",
-  "end": "14:30",
-  "date": "2025-07-01",
-  "type": "醫療"
-}
-
-請根據以下規則判斷任務類型 type：
-- 若語句中提到吃藥、服藥、藥、看醫生，type 請設為 "醫療"
-- 若語句中提到運動、健身、慢跑、散步、伸展，type 請設為 "運動"
-- 若語句中提到吃飯、喝水、喝飲料、吃午餐、吃早餐、吃晚餐，type 請設為 "飲食"
-- 若語句中沒有明確類型，type 請設為 "提醒"
-語句：「$input」
-請直接給我 JSON 回應。
-""";
+      今天是 $today，請從這句話中分析出任務內容與時間，輸出 JSON 格式如下：
+      {
+        "task": "吃藥",
+        "start": "14:00",
+        "end": "14:30",
+        "date": "2025-07-01",
+        "type": "醫療"
+      }
+      
+      請根據以下規則判斷任務類型 type：
+      - 若語句中提到吃藥、服藥、藥、看醫生，type 請設為 "醫療"
+      - 若語句中提到運動、健身、慢跑、散步、伸展，type 請設為 "運動"
+      - 若語句中提到吃飯、喝水、喝飲料、吃午餐、吃早餐、吃晚餐，type 請設為 "飲食"
+      - 若語句中沒有明確類型，type 請設為 "提醒"
+      語句：「$input」
+      請直接給我 JSON 回應。
+      """;
 
     final url = Uri.parse(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyDlBNZE4HcGwkQTJOUwXuN2i2xw67Egf_U",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyAzSjgqxwyeJkilJKXSj45rMzKG7zUsnEA",
     );
 
     final response = await http.post(
@@ -155,6 +156,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
     final dialog = TaskDialog(
       listenFunction: _listen,
       initialData: aiResult,
+      initialDate: selectedDate,
     );
 
     // 使用 builder: (dialogContext) => dialog 解掉 warning
@@ -181,7 +183,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
       final type = result['type'] ?? '提醒'; // 如果沒傳回 type，預設為「提醒」
       setState(() {
         taskMap.putIfAbsent(dateKey, () => []);
-        taskMap[dateKey]!.add({'task': result['task']!, 'time': start, 'end': end, 'type': type});
+        taskMap[dateKey]!.add({'task': result['task']!, 'time': start, 'end': end, 'type': type, 'completed': 'false',});
         taskMap[dateKey]!.sort((a, b) => a['time']!.compareTo(b['time']!));
       });
     }
@@ -191,23 +193,24 @@ class _UserTaskPageState extends State<UserTaskPage> {
     setState(() => taskMap[key]!.removeAt(index));
   }
 
-  void _pickDateWithCalendar(BuildContext context) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked != null) {
-      setState(() {
-        selectedDate = picked;
-      });
-    }
-  }
-
-
   void _jumpToToday() {
     setState(() => selectedDate = DateTime.now());
+  }
+
+  void _openMonthlyCalendar() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MonthlyOverviewPage(
+          taskMap: taskMap,
+          onSelectDate: (DateTime selected) {
+            setState(() {
+              selectedDate = selected;
+            });
+          },
+        ),
+      ),
+    );
   }
 
   Color _getColorByType(String? type) {
@@ -257,7 +260,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.calendar_today, color: Colors.black87),
-                  onPressed: () => _pickDateWithCalendar(context),
+                  onPressed: _openMonthlyCalendar,
                 ),
                 const Text(
                   '語音任務清單',
@@ -285,6 +288,10 @@ class _UserTaskPageState extends State<UserTaskPage> {
                 itemBuilder: (context, hour) {
                   final paddedHour = hour.toString().padLeft(2, '0');
                   final hourStr = "$paddedHour:00";
+                  final now = DateTime.now();
+                  final hourStart = DateTime(now.year, now.month, now.day, hour);
+                  final hourEnd = hourStart.add(const Duration(hours: 1));
+                  final isHourPast = now.isAfter(hourEnd);
                   final taskForHour = tasks
                       .where((t) => t['time']?.startsWith(paddedHour) ?? false)
                       .toList();
@@ -296,37 +303,90 @@ class _UserTaskPageState extends State<UserTaskPage> {
                       children: [
                         Text(
                           hourStr,
-                          style: const TextStyle(color: Colors.black87, fontSize: 18, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: isHourPast ? Colors.grey : Colors.black87,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         if (taskForHour.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 6),
-                            child: Text('— 無任務 —', style: TextStyle(color: Colors.grey)),
-                          ),
-                        ...taskForHour.map((t) => Card(
-                          color: _getColorByType(t['type']),
-                          elevation: 3,
-                          margin: const EdgeInsets.only(top: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            onTap: () => flutterTts.speak("${t['task']}，從 ${t['time']} 到 ${t['end']}"),
-                            leading: _getIconByType(t['type']),
-                            title: Text(
-                              t['task'] ?? '',
-                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87),
-                            ),
-                            subtitle: Text(
-                              '${t['time']} ~ ${t['end']}',
-                              style: const TextStyle(color: Colors.black54),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.redAccent),
-                              onPressed: () => _deleteTask(tasks.indexOf(t)),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              '— 無任務 —',
+                              style: TextStyle(color: isHourPast ? Colors.grey : Colors.black54),
                             ),
                           ),
-                        )),
+                        ...taskForHour.map((t) {
+                          final now = TimeOfDay.now();
+                          final taskTime = TimeOfDay(
+                            hour: int.tryParse(t['time']?.split(':')[0] ?? '0') ?? 0,
+                            minute: int.tryParse(t['time']?.split(':')[1] ?? '0') ?? 0,
+                          );
+
+                          final isPast = taskTime.hour < now.hour || (taskTime.hour == now.hour && taskTime.minute < now.minute);
+                          final isCompleted = t['completed'] == 'true';
+
+                          Color titleColor;
+                          if (isPast && !isCompleted) {
+                            titleColor = Colors.redAccent;
+                          } else if (isPast && isCompleted) {
+                            titleColor = Colors.green;
+                          } else {
+                            titleColor = Colors.black87;
+                          }
+
+                          return Card(
+                            color: _getColorByType(t['type']),
+                            elevation: 3,
+                            margin: const EdgeInsets.only(top: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: ListTile(
+                              onTap: () => flutterTts.speak("${t['task']}，從 ${t['time']} 到 ${t['end']}"),
+                              leading: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _getIconByType(t['type']),
+                                  Checkbox(
+                                    value: isCompleted,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        t['completed'] = value.toString();
+                                      });
+                                    },
+                                    side: WidgetStateBorderSide.resolveWith((states) {
+                                      if (states.contains(WidgetState.selected)) {
+                                        return const BorderSide(color: Colors.green, width: 2);
+                                      }
+                                      return const BorderSide(color: Colors.black54, width: 2);
+                                    }),
+                                    fillColor: WidgetStateProperty.resolveWith((states) {
+                                      if (states.contains(WidgetState.selected)) {
+                                        return Colors.blue;
+                                      }
+                                      return Colors.transparent;
+                                    }),
+                                    checkColor: Colors.white,
+                                  ),
+                                ],
+                              ),
+                              title: Text(
+                                t['task'] ?? '',
+                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: titleColor),
+                              ),
+                              subtitle: Text(
+                                '${t['time']} ~ ${t['end']}',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.redAccent),
+                                onPressed: () => _deleteTask(tasks.indexOf(t)),
+                              ),
+                            ),
+                          );
+                        }),
                       ],
                     ),
                   );
@@ -411,11 +471,13 @@ class _UserTaskPageState extends State<UserTaskPage> {
 class TaskDialog extends StatefulWidget {
   final Future<void> Function(Function(String, String?, String?, String?, String?)) listenFunction;
   final Map<String, String>? initialData;
+  final DateTime initialDate;
 
   const TaskDialog({
     required this.listenFunction,
     this.initialData,
     super.key,
+    required this.initialDate,
   });
 
   @override
@@ -433,6 +495,7 @@ class _TaskDialogState extends State<TaskDialog> {
   void initState() {
     super.initState();
     final data = widget.initialData;
+    taskDate = widget.initialDate;
     if (data != null) {
       _controller.text = data['task'] ?? '';
       startTime = data['start'];
@@ -453,7 +516,8 @@ class _TaskDialogState extends State<TaskDialog> {
     );
     if (picked != null) {
       final now = DateTime.now();
-      final selected = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
+      final selected = DateTime(
+          now.year, now.month, now.day, picked.hour, picked.minute);
       final formatted = DateFormat('HH:mm').format(selected);
       setState(() {
         if (isStart) {
@@ -479,106 +543,155 @@ class _TaskDialogState extends State<TaskDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('新增任務'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _controller,
-            decoration: const InputDecoration(labelText: '任務內容'),
-          ),
-          const SizedBox(height: 8),
-          Row(
+    final List<String> taskTypes = ['提醒', '醫療', '運動', '飲食'];
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: () => _pickTime(true),
-                  child: Text(startTime != null ? '開始: $startTime' : '選擇開始時間'),
+              const Text(
+                '新增任務',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _controller,
+                style: const TextStyle(fontSize: 18),
+                decoration: const InputDecoration(
+                  labelText: '任務內容',
+                  labelStyle: TextStyle(fontSize: 16),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextButton(
-                  onPressed: () => _pickTime(false),
-                  child: Text(endTime != null ? '結束: $endTime' : '選擇結束時間'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => _pickTime(true),
+                      child: Text(
+                        startTime != null ? '開始: $startTime' : '選擇開始時間',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => _pickTime(false),
+                      child: Text(
+                        endTime != null ? '結束: $endTime' : '選擇結束時間',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today, size: 20),
+                  const SizedBox(width: 10),
+                  TextButton(
+                    onPressed: _pickDate,
+                    child: Text(
+                      DateFormat('yyyy-MM-dd').format(taskDate),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(
+                  labelText: '任務分類',
+                  labelStyle: TextStyle(fontSize: 16),
                 ),
+                style: const TextStyle(fontSize: 16, color: Colors.white70),
+                value: taskType ?? '提醒',
+                items: taskTypes.map((type) {
+                  return DropdownMenuItem(
+                    value: type,
+                    child: Text(type, style: const TextStyle(fontSize: 16)),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    taskType = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.mic, size: 28),
+                    onPressed: () async {
+                      await widget.listenFunction((task, start, end, date, type) async {
+                        String? finalStart = start?.trim();
+                        String? finalEnd = end?.trim();
+
+                        if ((finalEnd == null || finalEnd.isEmpty) &&
+                            finalStart != null && finalStart.isNotEmpty) {
+                          try {
+                            final startDt = DateFormat("HH:mm").parse(finalStart);
+                            finalEnd = DateFormat("HH:mm").format(startDt.add(const Duration(minutes: 30)));
+                          } catch (e) {
+                            debugPrint('⚠️ 時間解析失敗: $e');
+                            finalStart = null;
+                            finalEnd = null;
+                          }
+                        }
+
+                        if (finalStart == null || finalStart.isEmpty) {
+                          await FlutterTts().speak("任務內容不完整，請再說一次");
+                          return;
+                        }
+
+                        await FlutterTts().speak("已幫你新增 $task，從 $finalStart 到 $finalEnd");
+
+                        setState(() {
+                          _controller.text = task;
+                          startTime = finalStart;
+                          endTime = finalEnd;
+                          taskType = type;
+                          if (date != null && date.isNotEmpty) {
+                            try {
+                              taskDate = DateFormat('yyyy-MM-dd').parse(date);
+                            } catch (_) {}
+                          }
+                        });
+                      });
+                    },
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('取消', style: TextStyle(fontSize: 18)),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context, {
+                        'task': _controller.text,
+                        'start': startTime ?? '',
+                        'end': endTime ?? '',
+                        'date': DateFormat('yyyy-MM-dd').format(taskDate),
+                        'type': taskType ?? '提醒',
+                      });
+                    },
+                    child: const Text('新增', style: TextStyle(fontSize: 18)),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today, size: 18),
-              const SizedBox(width: 6),
-              TextButton(
-                onPressed: _pickDate,
-                child: Text(DateFormat('yyyy-MM-dd').format(taskDate)),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.mic),
-          onPressed: () async {
-            await widget.listenFunction((task, start, end, date, type) async {
-              String? finalStart = start?.trim();
-              String? finalEnd = end?.trim();
-
-              // 自動補結束時間
-              if ((finalEnd == null || finalEnd.isEmpty) && finalStart != null && finalStart.isNotEmpty) {
-                try {
-                  final startDt = DateFormat("HH:mm").parse(finalStart);
-                  finalEnd = DateFormat("HH:mm").format(startDt.add(const Duration(minutes: 30)));
-                } catch (e) {
-                  debugPrint('⚠️ 時間解析失敗: $e');
-                  finalStart = null;
-                  finalEnd = null;
-                }
-              }
-
-              // 若無 start → 不進行填寫，避免錯誤
-              if (finalStart == null || finalStart.isEmpty) {
-                await FlutterTts().speak("任務內容不完整，請再說一次");
-                return;
-              }
-
-              await FlutterTts().speak("已幫你新增 $task，從 $finalStart 到 $finalEnd");
-
-              setState(() {
-                _controller.text = task;
-                startTime = finalStart;
-                endTime = finalEnd;
-                taskType = type;
-                if (date != null && date.isNotEmpty) {
-                  try {
-                    taskDate = DateFormat('yyyy-MM-dd').parse(date);
-                  } catch (_) {}
-                }
-              });
-            });
-          },
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context, {
-              'task': _controller.text,
-              'start': startTime ?? '',
-              'end': endTime ?? '',
-              'date': DateFormat('yyyy-MM-dd').format(taskDate),
-              'type': taskType ?? '提醒',
-            });
-          },
-          child: const Text('新增'),
-        ),
-      ],
     );
   }
 }
-

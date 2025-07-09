@@ -1,4 +1,4 @@
-name: memory_assistant
+name: memory
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -30,10 +30,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_tts: ^3.8.4
+  flutter_tts: ^4.2.3
   intl: ^0.20.2
   speech_to_text: 7.1.0
   permission_handler: 12.0.0+1
+  http: 1.4.0
+  table_calendar: ^3.2.0
+  calendar_view: ^1.4.0
+  syncfusion_flutter_calendar: ^30.1.38
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
