@@ -16,10 +16,18 @@ class UserTaskPage extends StatefulWidget {
 class _UserTaskPageState extends State<UserTaskPage> {
   final stt.SpeechToText _speech = stt.SpeechToText();
   final FlutterTts flutterTts = FlutterTts();
-
+  final ScrollController _scrollController = ScrollController();
   final Map<String, List<Map<String, String>>> taskMap = {};
   DateTime selectedDate = DateTime.now();
   bool _isListening = false;
+
+    @override
+    void initState() {
+      super.initState();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollIfToday();
+      });
+    }
 
   Future<void> _listen(Function(String task, String? startTime, String? endTime, String? date, String? type) onResult) async {
     if (!_isListening) {
@@ -230,8 +238,42 @@ class _UserTaskPageState extends State<UserTaskPage> {
   }
 
   void _jumpToToday() {
-    setState(() => selectedDate = DateTime.now());
+    setState(() {
+      selectedDate = DateTime.now();
+    });
+
+    // 延遲等畫面更新後再捲動
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToCurrentHour();
+    });
   }
+
+  void _scrollIfToday() {
+    final now = DateTime.now();
+    final isToday = DateFormat('yyyy-MM-dd').format(selectedDate) ==
+        DateFormat('yyyy-MM-dd').format(now);
+
+    if (isToday) {
+      _scrollToCurrentHour();
+    }
+  }
+
+  void _scrollToCurrentHour() {
+    final now = DateTime.now();
+    final currentHour = now.hour;
+
+    const double estimatedHourHeight = 78;
+    final offset = estimatedHourHeight * currentHour ;
+
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        offset.clamp(0.0, _scrollController.position.maxScrollExtent),
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
 
   void _openMonthlyCalendar() {
     Navigator.push(
@@ -319,6 +361,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: ListView.builder(
+                controller: _scrollController,
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 itemCount: 24,
                 itemBuilder: (context, hour) {
