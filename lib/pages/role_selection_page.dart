@@ -15,7 +15,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
   Future<void> _handleSelection(String role) async {
     if (_selectedRole == role) {
       // 第二次點擊，確認進入
-      final route = role == 'caregiver' ? '/caregiver' : '/user';
+      final route = role == 'caregiver' ? '/caregiver' : '/mainMenu';
       Navigator.pushReplacementNamed(context, route);
     } else {
       // 第一次點擊，只播報提示
@@ -25,6 +25,15 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
       final roleText = role == 'caregiver' ? '照顧者' : '被照顧者';
       await flutterTts.speak("你已選擇 $roleText，請再點擊一次確認選擇");
     }
+  }
+
+  Color transparentColor(Color color, int alpha) {
+    return Color.fromARGB(
+      alpha,
+      (color.r * 255.0).round() & 0xff,
+      (color.g * 255.0).round() & 0xff,
+      (color.b * 255.0).round() & 0xff,
+    );
   }
 
   Widget _buildRoleCard({
@@ -41,7 +50,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.2) : Colors.white,
+          color: isSelected ? transparentColor(color, 51) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -54,23 +63,28 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
-              child: Icon(icon, size: 32, color: color),
+              backgroundColor: transparentColor(color, 25),
               radius: 32,
+              child: Icon(icon, size: 32, color: color),
             ),
             const SizedBox(width: 20),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: color)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text(subtitle,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  ),
                 ],
               ),
             )
