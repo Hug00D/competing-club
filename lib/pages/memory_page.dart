@@ -1,11 +1,13 @@
+// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:html' as html;
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter/foundation.dart';
 
 class MemoryPage extends StatefulWidget {
   const MemoryPage({super.key});
@@ -17,56 +19,111 @@ class MemoryPage extends StatefulWidget {
 class _MemoryPageState extends State<MemoryPage> {
   final List<Map<String, dynamic>> _memories = [];
   final AudioPlayer _audioPlayer = AudioPlayer();
-  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  final AudioRecorder _recorder = AudioRecorder();
+
+  XFile? _imageFile;
+  Uint8List? _imageBytes;
   String? _recordedPath;
+  String? _webAudioUrl;
+  bool _isRecording = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _initRecorder();
-  }
-
-  Future<void> _initRecorder() async {
-    if (!kIsWeb) {
-      await _recorder.openRecorder();
-    }
-  }
+  html.MediaRecorder? _mediaRecorder;
+  html.MediaStream? _mediaStream;
+  final List<html.Blob> _audioChunks = [];
 
   @override
   void dispose() {
     _audioPlayer.dispose();
-    if (!kIsWeb) {
-      _recorder.closeRecorder();
-    }
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      _imageFile = picked;
+      if (kIsWeb) {
+        _imageBytes = await picked.readAsBytes();
+      }
+    }
+  }
+
+  Future<void> _startRecording() async {
+    if (kIsWeb) {
+      _mediaStream = await html.window.navigator.mediaDevices?.getUserMedia({'audio': true});
+      if (_mediaStream != null) {
+        _audioChunks.clear();
+        _mediaRecorder = html.MediaRecorder(_mediaStream!);
+        _mediaRecorder!.addEventListener('dataavailable', (event) {
+          final e = event as html.BlobEvent;
+          _audioChunks.add(e.data!);
+        });
+        _mediaRecorder!.addEventListener('stop', (_) {
+          final blob = html.Blob(_audioChunks, 'audio/webm');
+          _webAudioUrl = html.Url.createObjectUrl(blob);
+          _mediaStream?.getTracks().forEach((track) => track.stop());
+          _mediaStream = null;
+        });
+        _mediaRecorder!.start();
+      }
+    } else {
+      final status = await Permission.microphone.request();
+      if (!status.isGranted) return;
+
+      final path = '/sdcard/Download/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      _recordedPath = path;
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    if (kIsWeb) {
+      _mediaRecorder?.stop();
+    } else {
+      _recordedPath = await _recorder.stop();
+    }
+  }
+
+  void _playAudio(String? path, String? webUrl) async {
+    await _audioPlayer.stop();
+    if (kIsWeb && webUrl != null) {
+      await _audioPlayer.setUrl(webUrl);
+    } else if (path != null) {
+      await _audioPlayer.setFilePath(path);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('沒有可播放的語音')));
+      return;
+    }
+    await _audioPlayer.play();
+  }
+
   Future<void> _addMemory() async {
-    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-
-    final imageBytes = kIsWeb ? await image.readAsBytes() : null;
-
-    String? audioPath;
-    bool isRecording = false;
     final titleController = TextEditingController();
+    _imageFile = null;
+    _imageBytes = null;
+    _recordedPath = null;
+    _webAudioUrl = null;
+    _isRecording = false;
+
+    await _pickImage();
+    if (_imageFile == null) return;
+    if (!mounted) return;
 
     await showDialog(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
             title: const Text('新增回憶'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: kIsWeb
-                        ? Image.memory(imageBytes!, height: 180, fit: BoxFit.cover)
-                        : Image.file(File(image.path), height: 180, fit: BoxFit.cover),
-                  ),
+                  if (kIsWeb && _imageBytes != null)
+                    Image.memory(_imageBytes!, height: 180, fit: BoxFit.cover)
+                  else if (_imageFile != null)
+                    Image.file(File(_imageFile!.path), height: 180, fit: BoxFit.cover),
                   const SizedBox(height: 12),
                   TextField(
                     controller: titleController,
@@ -74,22 +131,15 @@ class _MemoryPageState extends State<MemoryPage> {
                   ),
                   const SizedBox(height: 12),
                   ElevatedButton.icon(
-                    icon: Icon(isRecording ? Icons.stop : Icons.mic),
-                    label: Text(isRecording ? '停止錄音' : '開始錄音'),
+                    icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                    label: Text(_isRecording ? '停止錄音' : '開始錄音'),
                     onPressed: () async {
-                      if (kIsWeb) return;
-                      if (!isRecording) {
-                        final status = await Permission.microphone.request();
-                        if (!status.isGranted) return;
-
-                        final tempDir = Directory.systemTemp;
-                        _recordedPath = '${tempDir.path}/memory_${DateTime.now().millisecondsSinceEpoch}.aac';
-                        await _recorder.startRecorder(toFile: _recordedPath);
+                      if (_isRecording) {
+                        await _stopRecording();
                       } else {
-                        await _recorder.stopRecorder();
-                        audioPath = _recordedPath;
+                        await _startRecording();
                       }
-                      setState(() => isRecording = !isRecording);
+                      setState(() => _isRecording = !_isRecording);
                     },
                   ),
                   const SizedBox(height: 8),
@@ -98,24 +148,28 @@ class _MemoryPageState extends State<MemoryPage> {
                       final picked = await FilePicker.platform.pickFiles(type: FileType.audio);
                       if (picked != null && picked.files.single.path != null) {
                         setState(() {
-                          audioPath = picked.files.single.path;
+                          _recordedPath = picked.files.single.path!;
+                          _webAudioUrl = null;
                         });
                       }
                     },
                     child: const Text('或選擇音檔'),
-                  ),
+                  )
                 ],
               ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
               ElevatedButton(
-                onPressed: () => Navigator.pop(context, titleController.text),
+                onPressed: () {
+                  if (!mounted) return;
+                  Navigator.pop(context, titleController.text);
+                },
                 child: const Text('儲存'),
               ),
             ],
-          ),
-        );
+          );
+        });
       },
     );
 
@@ -124,28 +178,13 @@ class _MemoryPageState extends State<MemoryPage> {
       setState(() {
         _memories.add({
           'title': title,
-          'imagePath': image.path,
-          'imageBytes': imageBytes,
-          'audioPath': audioPath,
           'date': DateTime.now(),
+          'imagePath': _imageFile?.path,
+          'imageBytes': _imageBytes,
+          'audioPath': _recordedPath,
+          'webAudioUrl': _webAudioUrl,
         });
       });
-    }
-    _recordedPath = null;
-  }
-
-  void _playAudio(String? path) async {
-    if (path == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('這張回憶沒有語音')),
-      );
-      return;
-    }
-    await _audioPlayer.stop();
-    if (kIsWeb) {
-      await _audioPlayer.play(UrlSource(path));
-    } else {
-      await _audioPlayer.play(DeviceFileSource(path));
     }
   }
 
@@ -155,10 +194,7 @@ class _MemoryPageState extends State<MemoryPage> {
       appBar: AppBar(
         title: const Text('回憶錄'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add_a_photo),
-            onPressed: _addMemory,
-          )
+          IconButton(icon: const Icon(Icons.add), onPressed: _addMemory),
         ],
       ),
       body: GridView.builder(
@@ -173,30 +209,22 @@ class _MemoryPageState extends State<MemoryPage> {
         itemBuilder: (context, index) {
           final memory = _memories[index];
           return GestureDetector(
-            onTap: () => _playAudio(memory['audioPath']),
+            onTap: () => _playAudio(memory['audioPath'], memory['webAudioUrl']),
             child: Card(
-              elevation: 4,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 4,
               child: Column(
                 children: [
                   Expanded(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: kIsWeb
-                          ? Image.memory(
-                        memory['imageBytes'],
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      )
-                          : Image.file(
-                        File(memory['imagePath']),
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
+                      child: kIsWeb && memory['imageBytes'] != null
+                          ? Image.memory(memory['imageBytes'], width: double.infinity, fit: BoxFit.cover)
+                          : Image.file(File(memory['imagePath']), width: double.infinity, fit: BoxFit.cover),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(8.0),
+                    padding: const EdgeInsets.all(8),
                     child: Column(
                       children: [
                         Text(
