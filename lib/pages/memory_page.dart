@@ -1,13 +1,17 @@
-// ignore: avoid_web_libraries_in_flutter, deprecated_member_use
-import 'dart:html' as html;
 import 'dart:io';
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
-import 'package:just_audio/just_audio.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
+
+// Web only
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class MemoryPage extends StatefulWidget {
   const MemoryPage({super.key});
@@ -25,8 +29,10 @@ class _MemoryPageState extends State<MemoryPage> {
   Uint8List? _imageBytes;
   String? _recordedPath;
   String? _webAudioUrl;
+  String? _downloadUrl;
   bool _isRecording = false;
 
+  // Web only
   html.MediaRecorder? _mediaRecorder;
   html.MediaStream? _mediaStream;
   final List<html.Blob> _audioChunks = [];
@@ -38,12 +44,16 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      _imageFile = picked;
-      if (kIsWeb) {
-        _imageBytes = await picked.readAsBytes();
+    if (kIsWeb) {
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result != null && result.files.single.bytes != null) {
+        _imageBytes = result.files.single.bytes;
+      }
+    } else {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery);
+      if (picked != null) {
+        _imageFile = picked;
       }
     }
   }
@@ -52,6 +62,12 @@ class _MemoryPageState extends State<MemoryPage> {
     if (kIsWeb) {
       _mediaStream = await html.window.navigator.mediaDevices?.getUserMedia({'audio': true});
       if (_mediaStream != null) {
+        final audioTracks = _mediaStream!.getAudioTracks();
+        print("🎙 取得音訊軌道數量：\${audioTracks.length}");
+        if (audioTracks.isEmpty) {
+          print("⚠️ 沒有可用音訊軌道，請檢查麥克風權限");
+        }
+
         _audioChunks.clear();
         _mediaRecorder = html.MediaRecorder(_mediaStream!);
         _mediaRecorder!.addEventListener('dataavailable', (event) {
@@ -60,7 +76,18 @@ class _MemoryPageState extends State<MemoryPage> {
         });
         _mediaRecorder!.addEventListener('stop', (_) {
           final blob = html.Blob(_audioChunks, 'audio/webm');
+          print("🧪 blob.type = \${blob.type}");
+          print("音訊長度（bytes）：\${blob.size}");
+
           _webAudioUrl = html.Url.createObjectUrl(blob);
+          _downloadUrl = _webAudioUrl;
+
+          final html.AudioElement audio = html.AudioElement()
+            ..src = _webAudioUrl!
+            ..autoplay = false
+            ..controls = true;
+          html.document.body!.append(audio);
+
           _mediaStream?.getTracks().forEach((track) => track.stop());
           _mediaStream = null;
         });
@@ -69,8 +96,7 @@ class _MemoryPageState extends State<MemoryPage> {
     } else {
       final status = await Permission.microphone.request();
       if (!status.isGranted) return;
-
-      final path = '/sdcard/Download/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path = '/sdcard/Download/audio_\${DateTime.now().millisecondsSinceEpoch}.m4a';
       _recordedPath = path;
       await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
     }
@@ -85,17 +111,23 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   void _playAudio(String? path, String? webUrl) async {
-    await _audioPlayer.stop();
-    if (kIsWeb && webUrl != null) {
-      await _audioPlayer.setUrl(webUrl);
-    } else if (path != null) {
-      await _audioPlayer.setFilePath(path);
-    } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('沒有可播放的語音')));
-      return;
+    try {
+      await _audioPlayer.stop();
+      if (kIsWeb && webUrl != null) {
+        print("播放 Web 音訊：\$webUrl");
+        await _audioPlayer.setUrl(webUrl);
+      } else if (path != null) {
+        print("播放手機音訊：\$path");
+        await _audioPlayer.setFilePath(path);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('沒有可播放的語音')));
+        return;
+      }
+      await _audioPlayer.play();
+      print("播放完成");
+    } catch (e) {
+      print("播放錯誤: \$e");
     }
-    await _audioPlayer.play();
   }
 
   Future<void> _addMemory() async {
@@ -104,10 +136,11 @@ class _MemoryPageState extends State<MemoryPage> {
     _imageBytes = null;
     _recordedPath = null;
     _webAudioUrl = null;
+    _downloadUrl = null;
     _isRecording = false;
 
     await _pickImage();
-    if (_imageFile == null) return;
+    if (_imageFile == null && _imageBytes == null) return;
     if (!mounted) return;
 
     await showDialog(
@@ -142,6 +175,19 @@ class _MemoryPageState extends State<MemoryPage> {
                       setState(() => _isRecording = !_isRecording);
                     },
                   ),
+                  if (kIsWeb && _downloadUrl != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.download),
+                        label: const Text('下載錄音檔'),
+                        onPressed: () {
+                          final anchor = html.AnchorElement(href: _downloadUrl)
+                            ..setAttribute('download', 'recorded_audio.webm')
+                            ..click();
+                        },
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: () async {
@@ -185,6 +231,7 @@ class _MemoryPageState extends State<MemoryPage> {
           'webAudioUrl': _webAudioUrl,
         });
       });
+      print("記憶新增：\$_webAudioUrl");
     }
   }
 
