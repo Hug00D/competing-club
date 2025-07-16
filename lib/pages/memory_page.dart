@@ -1,17 +1,24 @@
 import 'dart:io';
-import 'dart:async';
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:record/record.dart';
+import 'add_memory_page.dart';
+import 'edit_memory_page.dart';
 
-// Web only
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+class Memory {
+  final String title;
+  final String description;
+  final DateTime date;
+  final List<String> imagePaths;
+  final String audioPath;
+
+  Memory({
+    required this.title,
+    required this.description,
+    required this.date,
+    required this.imagePaths,
+    required this.audioPath,
+  });
+}
 
 class MemoryPage extends StatefulWidget {
   const MemoryPage({super.key});
@@ -21,21 +28,218 @@ class MemoryPage extends StatefulWidget {
 }
 
 class _MemoryPageState extends State<MemoryPage> {
-  final List<Map<String, dynamic>> _memories = [];
+  final List<Memory> _memories = [];
   final AudioPlayer _audioPlayer = AudioPlayer();
-  final AudioRecorder _recorder = AudioRecorder();
 
-  XFile? _imageFile;
-  Uint8List? _imageBytes;
-  String? _recordedPath;
-  String? _webAudioUrl;
-  String? _downloadUrl;
-  bool _isRecording = false;
+  void _showMemoryDetail(Memory memory) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Stack(
+          children: [
+            DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              maxChildSize: 0.85,
+              minChildSize: 0.5,
+              expand: false,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: SingleChildScrollView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.only(bottom: 80),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 首圖區
+                        Stack(
+                          alignment: Alignment.bottomLeft,
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(20),
+                                topRight: Radius.circular(20),
+                              ),
+                              child: memory.imagePaths.isNotEmpty
+                                  ? Image.file(
+                                      File(memory.imagePaths.first),
+                                      fit: BoxFit.contain,
+                                      width: double.infinity,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        height: 200,
+                                        color: Colors.grey[300],
+                                      ),
+                                    )
+                                  : Container(
+                                      height: 200,
+                                      width: double.infinity,
+                                      color: Colors.grey[300],
+                                    ),
+                            ),
+                            Positioned(
+                              bottom: 20,
+                              left: 20,
+                              right: 20,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    memory.title,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black54,
+                                          blurRadius: 4,
+                                        )
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.black.withOpacity(0.7),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(30),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.play_arrow, color: Colors.white),
+                                    label: const Text('播放語音', style: TextStyle(color: Colors.white)),
+                                    onPressed: () async {
+                                      final player = AudioPlayer();
+                                      await player.setFilePath(memory.audioPath);
+                                      await player.play();
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '描述',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color.fromARGB(221, 103, 102, 102),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                memory.description,
+                                style: const TextStyle(fontSize: 16, color: Colors.black87),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        ...memory.imagePaths.skip(1).map((path) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                File(path),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  height: 150,
+                                  color: Colors.grey[300],
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            // 編輯按鈕
+            Positioned(
+              bottom: 20,
+              left: 20,
+              right: 20,
+              child: ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context); // 關閉頁面
 
-  // Web only
-  html.MediaRecorder? _mediaRecorder;
-  html.MediaStream? _mediaStream;
-  final List<html.Blob> _audioChunks = [];
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EditMemoryPage(
+                        title: memory.title,
+                        description: memory.description,
+                        imagePaths: memory.imagePaths,
+                        audioPath: memory.audioPath,
+                      ),
+                    ),
+                  );
+
+                  if (result != null && result is Map<String, dynamic>) {
+                    final updatedMemory = Memory(
+                      title: result['title'],
+                      description: result['description'],
+                      date: DateTime.now(),
+                      imagePaths: (result['images'] as List<File>).map((f) => f.path).toList(),
+                      audioPath: result['audio'] ?? '',
+                    );
+
+                    setState(() {
+                      final index = _memories.indexOf(memory);
+                      if (index != -1) _memories[index] = updatedMemory;
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('編輯回憶', style: TextStyle(fontSize: 16, color: Colors.white)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _navigateToAddMemory() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const AddMemoryPage(),
+      ),
+    );
+
+    if (result != null && result is Map<String, dynamic>) {
+      final newMemory = Memory(
+        title: result['title'],
+        description: result['description'] ?? '',
+        date: DateTime.now(),
+        imagePaths: (result['images'] as List<File>).map((f) => f.path).toList(),
+        audioPath: result['audio'] ?? '',
+      );
+      setState(() => _memories.add(newMemory));
+    }
+  }
 
   @override
   void dispose() {
@@ -43,256 +247,96 @@ class _MemoryPageState extends State<MemoryPage> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    if (kIsWeb) {
-      final result = await FilePicker.platform.pickFiles(type: FileType.image);
-      if (result != null && result.files.single.bytes != null) {
-        _imageBytes = result.files.single.bytes;
-      }
-    } else {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(source: ImageSource.gallery);
-      if (picked != null) {
-        _imageFile = picked;
-      }
-    }
-  }
-
-  Future<void> _startRecording() async {
-    if (kIsWeb) {
-      _mediaStream = await html.window.navigator.mediaDevices?.getUserMedia({'audio': true});
-      if (_mediaStream != null) {
-        final audioTracks = _mediaStream!.getAudioTracks();
-        print("🎙 取得音訊軌道數量：\${audioTracks.length}");
-        if (audioTracks.isEmpty) {
-          print("⚠️ 沒有可用音訊軌道，請檢查麥克風權限");
-        }
-
-        _audioChunks.clear();
-        _mediaRecorder = html.MediaRecorder(_mediaStream!);
-        _mediaRecorder!.addEventListener('dataavailable', (event) {
-          final e = event as html.BlobEvent;
-          _audioChunks.add(e.data!);
-        });
-        _mediaRecorder!.addEventListener('stop', (_) {
-          final blob = html.Blob(_audioChunks, 'audio/webm');
-          print("🧪 blob.type = \${blob.type}");
-          print("音訊長度（bytes）：\${blob.size}");
-
-          _webAudioUrl = html.Url.createObjectUrl(blob);
-          _downloadUrl = _webAudioUrl;
-
-          final html.AudioElement audio = html.AudioElement()
-            ..src = _webAudioUrl!
-            ..autoplay = false
-            ..controls = true;
-          html.document.body!.append(audio);
-
-          _mediaStream?.getTracks().forEach((track) => track.stop());
-          _mediaStream = null;
-        });
-        _mediaRecorder!.start();
-      }
-    } else {
-      final status = await Permission.microphone.request();
-      if (!status.isGranted) return;
-      final path = '/sdcard/Download/audio_\${DateTime.now().millisecondsSinceEpoch}.m4a';
-      _recordedPath = path;
-      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    if (kIsWeb) {
-      _mediaRecorder?.stop();
-    } else {
-      _recordedPath = await _recorder.stop();
-    }
-  }
-
-  void _playAudio(String? path, String? webUrl) async {
-    try {
-      await _audioPlayer.stop();
-      if (kIsWeb && webUrl != null) {
-        print("播放 Web 音訊：\$webUrl");
-        await _audioPlayer.setUrl(webUrl);
-      } else if (path != null) {
-        print("播放手機音訊：\$path");
-        await _audioPlayer.setFilePath(path);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('沒有可播放的語音')));
-        return;
-      }
-      await _audioPlayer.play();
-      print("播放完成");
-    } catch (e) {
-      print("播放錯誤: \$e");
-    }
-  }
-
-  Future<void> _addMemory() async {
-    final titleController = TextEditingController();
-    _imageFile = null;
-    _imageBytes = null;
-    _recordedPath = null;
-    _webAudioUrl = null;
-    _downloadUrl = null;
-    _isRecording = false;
-
-    await _pickImage();
-    if (_imageFile == null && _imageBytes == null) return;
-    if (!mounted) return;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('新增回憶'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (kIsWeb && _imageBytes != null)
-                    Image.memory(_imageBytes!, height: 180, fit: BoxFit.cover)
-                  else if (_imageFile != null)
-                    Image.file(File(_imageFile!.path), height: 180, fit: BoxFit.cover),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: '標題'),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                    label: Text(_isRecording ? '停止錄音' : '開始錄音'),
-                    onPressed: () async {
-                      if (_isRecording) {
-                        await _stopRecording();
-                      } else {
-                        await _startRecording();
-                      }
-                      setState(() => _isRecording = !_isRecording);
-                    },
-                  ),
-                  if (kIsWeb && _downloadUrl != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.download),
-                        label: const Text('下載錄音檔'),
-                        onPressed: () {
-                          final anchor = html.AnchorElement(href: _downloadUrl)
-                            ..setAttribute('download', 'recorded_audio.webm')
-                            ..click();
-                        },
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () async {
-                      final picked = await FilePicker.platform.pickFiles(type: FileType.audio);
-                      if (picked != null && picked.files.single.path != null) {
-                        setState(() {
-                          _recordedPath = picked.files.single.path!;
-                          _webAudioUrl = null;
-                        });
-                      }
-                    },
-                    child: const Text('或選擇音檔'),
-                  )
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-              ElevatedButton(
-                onPressed: () {
-                  if (!mounted) return;
-                  Navigator.pop(context, titleController.text);
-                },
-                child: const Text('儲存'),
-              ),
-            ],
-          );
-        });
-      },
-    );
-
-    final title = titleController.text;
-    if (title.isNotEmpty) {
-      setState(() {
-        _memories.add({
-          'title': title,
-          'date': DateTime.now(),
-          'imagePath': _imageFile?.path,
-          'imageBytes': _imageBytes,
-          'audioPath': _recordedPath,
-          'webAudioUrl': _webAudioUrl,
-        });
-      });
-      print("記憶新增：\$_webAudioUrl");
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('回憶錄'),
-        actions: [
-          IconButton(icon: const Icon(Icons.add), onPressed: _addMemory),
-        ],
-      ),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(12),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.85,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-        ),
-        itemCount: _memories.length,
-        itemBuilder: (context, index) {
-          final memory = _memories[index];
-          return GestureDetector(
-            onTap: () => _playAudio(memory['audioPath'], memory['webAudioUrl']),
-            child: Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              elevation: 4,
-              child: Column(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: kIsWeb && memory['imageBytes'] != null
-                          ? Image.memory(memory['imageBytes'], width: double.infinity, fit: BoxFit.cover)
-                          : Image.file(File(memory['imagePath']), width: double.infinity, fit: BoxFit.cover),
+      appBar: AppBar(title: const Text('回憶錄')),
+      body: _memories.isEmpty
+          ? const Center(child: Text('尚未新增任何回憶'))
+          : GridView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: _memories.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 3 / 4,
+              ),
+              itemBuilder: (context, index) {
+                final memory = _memories[index];
+                return GestureDetector(
+                  onTap: () => _showMemoryDetail(memory),
+                  child: Card(
+                    elevation: 4,
+                    color: Colors.black87,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          memory['title'],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        memory.imagePaths.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(12),
+                                  topRight: Radius.circular(12),
+                                ),
+                                child: Image.file(
+                                  File(memory.imagePaths.first),
+                                  width: double.infinity,
+                                  height: 150,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    height: 150,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                              )
+                            : Container(
+                                height: 150,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[400],
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(12),
+                                    topRight: Radius.circular(12),
+                                  ),
+                                ),
+                              ),
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                memory.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                memory.date.toString().substring(0, 16),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          (memory['date'] as DateTime).toLocal().toString().split(' ')[0],
-                          style: const TextStyle(color: Colors.grey),
-                        )
                       ],
                     ),
-                  )
-                ],
-              ),
+                  ),
+                );
+              },
             ),
-          );
-        },
+      floatingActionButton: FloatingActionButton(
+        onPressed: _navigateToAddMemory,
+        backgroundColor: Colors.deepPurple,
+        child: const Icon(Icons.add),
       ),
     );
   }
