@@ -33,7 +33,7 @@ dependencies:
   flutter_tts: ^4.2.3
   intl: ^0.20.2
   speech_to_text: 7.1.0
-  permission_handler: 12.0.0+1
+  permission_handler: ^12.0.1
   http: 1.4.0
   table_calendar: ^3.2.0
   calendar_view: ^1.4.0
@@ -57,7 +57,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -100,3 +100,4 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
