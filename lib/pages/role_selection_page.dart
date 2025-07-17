@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
 
 class RoleSelectionPage extends StatefulWidget {
   const RoleSelectionPage({super.key});
@@ -13,12 +16,33 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
   String? _selectedRole; // 'caregiver' or 'user'
 
   Future<void> _handleSelection(String role) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      await flutterTts.speak("尚未登入，無法選擇角色");
+      return;
+    }
+
     if (_selectedRole == role) {
-      // 第二次點擊，確認進入
+      final uid = user.uid;
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+
+      final dataToSave = {
+        'role': role,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (role == 'user') {
+        final uniqueId = const Uuid().v4();
+        dataToSave['identityCode'] = uniqueId;
+      }
+
+      await userDoc.set(dataToSave, SetOptions(merge: true));
+      await flutterTts.speak("角色已確認並儲存");
+
+      if (!mounted) return; // ✅ 確保 context 還有效
       final route = role == 'caregiver' ? '/caregiver' : '/mainMenu';
       Navigator.pushReplacementNamed(context, route);
     } else {
-      // 第一次點擊，只播報提示
       setState(() {
         _selectedRole = role;
       });
@@ -26,6 +50,7 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
       await flutterTts.speak("你已選擇 $roleText，請再點擊一次確認選擇");
     }
   }
+
 
   Color transparentColor(Color color, int alpha) {
     return Color.fromARGB(

@@ -5,6 +5,48 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:intl/intl.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'monthly_overview_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+
+Future<void> uploadTasksToFirebase(Map<String, List<Map<String, String>>> taskMap) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    return;
+  }
+
+  final uid = user.uid;
+  final tasksRef = FirebaseFirestore.instance
+      .collection('users')
+      .doc(uid)
+      .collection('tasks');
+
+  // 清除舊資料（選擇性）
+  final snapshot = await tasksRef.get();
+  for (final doc in snapshot.docs) {
+    await doc.reference.delete();
+  }
+
+  for (final dateKey in taskMap.keys) {
+    final tasks = taskMap[dateKey]!;
+    for (final task in tasks) {
+      final docRef = await tasksRef.add({
+        'task': task['task'],
+        'time': task['time'],
+        'end': task['end'],
+        'type': task['type'],
+        'completed': task['completed'] == 'true',
+        'date': dateKey,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // 把 docId 存進本地 taskMap（可選擇要不要更新本地）
+      task['docId'] = docRef.id;
+    }
+  }
+}
+
+
 
 class UserTaskPage extends StatefulWidget {
   const UserTaskPage({super.key});
@@ -14,19 +56,72 @@ class UserTaskPage extends StatefulWidget {
 }
 
 class _UserTaskPageState extends State<UserTaskPage> {
+  Map<String, List<Map<String, String>>> taskMap = {};
   final stt.SpeechToText _speech = stt.SpeechToText();
   final FlutterTts flutterTts = FlutterTts();
   final ScrollController _scrollController = ScrollController();
-  final Map<String, List<Map<String, String>>> taskMap = {};
+  //final Map<String, List<Map<String, String>>> taskMap = {};
   DateTime selectedDate = DateTime.now();
   bool _isListening = false;
 
   @override
   void initState() {
     super.initState();
+    loadTasksFromFirebase();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollIfToday();
     });
+  }
+
+  Future<void> loadTasksFromFirebase() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final uid = user.uid;
+    final tasksRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('tasks');
+
+    final snapshot = await tasksRef.get();
+
+    final Map<String, List<Map<String, String>>> loadedTaskMap = {};
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final date = data['date'] ?? '未知日期';
+      loadedTaskMap.putIfAbsent(date, () => []);
+      loadedTaskMap[date]!.add({
+        'task': data['task'] ?? '',
+        'time': data['time'] ?? '',
+        'end': data['end'] ?? '',
+        'type': data['type'] ?? '提醒',
+        'completed': data['completed']?.toString() ?? 'false',
+        'docId': doc.id,
+      });
+    }
+
+    // 填回你的 taskMap 並更新畫面
+    setState(() {
+      taskMap = loadedTaskMap;
+    });
+
+  }
+
+  Future<void> deleteTaskFromFirebase(String docId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final uid = user.uid;
+    final taskRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('tasks')
+        .doc(docId);
+
+    await taskRef.delete();
   }
 
   Future<void> _listen(Function(String task, String? startTime, String? endTime, String? date, String? type) onResult) async {
@@ -230,12 +325,24 @@ class _UserTaskPageState extends State<UserTaskPage> {
         taskMap[dateKey]!.add({'task': result['task']!, 'time': start, 'end': end, 'type': type, 'completed': 'false',});
         taskMap[dateKey]!.sort((a, b) => a['time']!.compareTo(b['time']!));
       });
+
+      await uploadTasksToFirebase(taskMap);
     }
   }
-  void _deleteTask(int index) {
+  Future<void> _deleteTask(int index) async {
     final key = DateFormat('yyyy-MM-dd').format(selectedDate);
-    setState(() => taskMap[key]!.removeAt(index));
+    final task = taskMap[key]![index];
+
+    final docId = task['docId'];
+    if (docId != null) {
+      await deleteTaskFromFirebase(docId); // ⬅️ 刪 Firebase 上的資料
+    }
+
+    setState(() {
+      taskMap[key]!.removeAt(index); // ⬅️ 同時從本地移除
+    });
   }
+
 
   void _jumpToToday() {
     setState(() {
@@ -537,11 +644,16 @@ class _UserTaskPageState extends State<UserTaskPage> {
                               subtitle: Text('${t['time']} ~ ${t['end']}', style: const TextStyle(color: Colors.grey)),
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                onPressed: () => _deleteTask(tasks.indexOf(t)),
+                                onPressed: () async {
+                                  final index = tasks.indexOf(t);
+                                  await _deleteTask(index);
+                                },
                               ),
                             ),
                           );
                         }),
+                        if (hour == 23)
+                          const SizedBox(height: 50),
                       ],
                     ),
                   );
@@ -559,7 +671,6 @@ class _UserTaskPageState extends State<UserTaskPage> {
       ),
     );
   }
-
 
   Widget _buildDateSelector() {
     final weekday = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
