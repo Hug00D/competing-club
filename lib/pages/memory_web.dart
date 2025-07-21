@@ -1,6 +1,6 @@
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
-import 'memory_platform.dart';
+import 'memery_platform.dart';
 
 class WebMemoryRecorder extends MemoryPlatform {
   html.MediaRecorder? _mediaRecorder;

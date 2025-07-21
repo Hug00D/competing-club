@@ -1,8 +1,9 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:memory/pages/memory_platform.dart';
+import 'memery_platform.dart';
 
 class AddMemoryPage extends StatefulWidget {
   const AddMemoryPage({super.key});
@@ -14,7 +15,7 @@ class AddMemoryPage extends StatefulWidget {
 class _AddMemoryPageState extends State<AddMemoryPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  List<File> _imageFiles = [];
+  List<String> _imagePaths = []; // ✅ path-only
   String? _recordedPath;
   bool _isRecording = false;
   late final MemoryPlatform recorder;
@@ -29,7 +30,7 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
     final pickedFiles = await ImagePicker().pickMultiImage();
     if (pickedFiles.isNotEmpty) {
       setState(() {
-        _imageFiles.addAll(pickedFiles.map((e) => File(e.path)));
+        _imagePaths.addAll(pickedFiles.map((e) => e.path));
       });
     }
   }
@@ -61,19 +62,22 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
     final memory = {
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'images': _imageFiles,
-      'audio': _recordedPath,
+      'imagePaths': _imagePaths, // ✅ List<String>
+      'audioPath': _recordedPath,
     };
 
-    Navigator.pop(context, memory);
+    if (!mounted) return;
+    Navigator.pop(context, memory); // ✅ Web-safe
   }
 
-  Widget _buildImageItem(File file) {
+  Widget _buildImageItem(String path) {
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.file(file, width: 100, height: 100, fit: BoxFit.cover),
+          child: kIsWeb
+              ? Image.network(path, width: 100, height: 100, fit: BoxFit.cover)
+              : Image.file(File(path), width: 100, height: 100, fit: BoxFit.cover),
         ),
         Positioned(
           top: -8,
@@ -87,7 +91,7 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
             ),
             onPressed: () {
               setState(() {
-                _imageFiles.remove(file);
+                _imagePaths.remove(path);
               });
             },
           ),
@@ -119,11 +123,11 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
               ),
             ),
             const SizedBox(height: 16),
-            if (_imageFiles.isNotEmpty)
+            if (_imagePaths.isNotEmpty)
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
-                children: _imageFiles.map(_buildImageItem).toList(),
+                children: _imagePaths.map(_buildImageItem).toList(),
               ),
             TextButton.icon(
               icon: const Icon(Icons.add_photo_alternate),

@@ -49,7 +49,7 @@ class _LoginPageState extends State<LoginPage> {
           final role = doc['role'];
           if (!mounted) return;
           if (role == 'caregiver') {
-            Navigator.pushReplacementNamed(context, '/caregiver');
+            Navigator.pushReplacementNamed(context, '/selectUser');
           } else if (role == 'user') {
             Navigator.pushReplacementNamed(context, '/mainMenu');
           }

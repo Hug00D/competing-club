@@ -9,13 +9,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 
-Future<void> uploadTasksToFirebase(Map<String, List<Map<String, String>>> taskMap) async {
+Future<void> uploadTasksToFirebase(Map<String, List<Map<String, String>>> taskMap, String uid) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
     return;
   }
 
-  final uid = user.uid;
+
   final tasksRef = FirebaseFirestore.instance
       .collection('users')
       .doc(uid)
@@ -49,7 +49,8 @@ Future<void> uploadTasksToFirebase(Map<String, List<Map<String, String>>> taskMa
 
 
 class UserTaskPage extends StatefulWidget {
-  const UserTaskPage({super.key});
+  final String? targetUid;
+  const UserTaskPage({super.key, this.targetUid});
 
   @override
   State<UserTaskPage> createState() => _UserTaskPageState();
@@ -64,9 +65,12 @@ class _UserTaskPageState extends State<UserTaskPage> {
   DateTime selectedDate = DateTime.now();
   bool _isListening = false;
 
+  late final String uid;
   @override
   void initState() {
     super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    uid = widget.targetUid ?? user?.uid ?? '';
     loadTasksFromFirebase();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollIfToday();
@@ -79,7 +83,6 @@ class _UserTaskPageState extends State<UserTaskPage> {
       return;
     }
 
-    final uid = user.uid;
     final tasksRef = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -326,7 +329,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
         taskMap[dateKey]!.sort((a, b) => a['time']!.compareTo(b['time']!));
       });
 
-      await uploadTasksToFirebase(taskMap);
+      await uploadTasksToFirebase(taskMap, uid);
     }
   }
   Future<void> _deleteTask(int index) async {
@@ -397,6 +400,28 @@ class _UserTaskPageState extends State<UserTaskPage> {
       ),
     );
   }
+
+  void _toggleTaskCompletion(Map<String, String> task, bool isCompleted) async {
+    setState(() {
+      task['completed'] = isCompleted.toString();
+    });
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final uid = widget.targetUid ?? user.uid;
+    final docId = task['docId'];
+    if (docId == null) return;
+
+    final taskRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('tasks')
+        .doc(docId);
+
+    await taskRef.update({'completed': isCompleted}); // ← ✅ 這裡是 bool
+  }
+
 
   Color _getColorByType(String? type) {
     switch (type) {
@@ -617,9 +642,9 @@ class _UserTaskPageState extends State<UserTaskPage> {
                                   Checkbox(
                                     value: isCompleted,
                                     onChanged: (value) {
-                                      setState(() {
-                                        t['completed'] = value.toString();
-                                      });
+                                      if (value != null) {
+                                        _toggleTaskCompletion(t, value);
+                                      }
                                     },
                                     side: WidgetStateBorderSide.resolveWith((states) {
                                       if (states.contains(WidgetState.selected)) {
@@ -635,6 +660,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
                                     }),
                                     checkColor: Colors.white,
                                   ),
+
                                 ],
                               ),
                               title: Text(

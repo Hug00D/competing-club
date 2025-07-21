@@ -40,8 +40,20 @@ class _RoleSelectionPageState extends State<RoleSelectionPage> {
       await flutterTts.speak("角色已確認並儲存");
 
       if (!mounted) return; // ✅ 確保 context 還有效
-      final route = role == 'caregiver' ? '/caregiver' : '/mainMenu';
-      Navigator.pushReplacementNamed(context, route);
+      if (role == 'caregiver') {
+        final caregiverDoc = await FirebaseFirestore.instance.collection('caregivers').doc(uid).get();
+        final boundUsers = caregiverDoc.data()?['boundUsers'] ?? [];
+
+        if (boundUsers.isEmpty) {
+          if (!mounted) return;
+          Navigator.pushReplacementNamed(context, '/bindUser'); // 前往綁定頁
+        } else {
+          if (!mounted) return;
+          Navigator.pushReplacementNamed(context, '/selectUser'); // 前往選擇對象頁
+        }
+      } else {
+        Navigator.pushReplacementNamed(context, '/mainMenu'); // 被照顧者進主畫面
+      }
     } else {
       setState(() {
         _selectedRole = role;

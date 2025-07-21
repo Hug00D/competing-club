@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart'; // 為了 Clipboard
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -21,6 +22,8 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadProfile();
   }
 
+  String? _identityCode; // 新增欄位
+
   Future<void> _loadProfile() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -33,6 +36,7 @@ class _ProfilePageState extends State<ProfilePage> {
         setState(() {
           _nameController.text = data['name'] ?? '';
           _role = data['role'] ?? '';
+          _identityCode = data['identityCode'] ?? '';
           _isLoading = false;
         });
       } else {
@@ -80,6 +84,41 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  Widget _buildIdentityCodeField() {
+    return _identityCode == null || _identityCode!.isEmpty
+        ? const SizedBox.shrink()
+        : GestureDetector(
+      onLongPress: () {
+        Clipboard.setData(ClipboardData(text: _identityCode!));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已複製識別碼')),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(top: 16),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade400),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('唯一識別碼（長按可複製）', style: TextStyle(fontSize: 14, color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text(
+              _identityCode!,
+              style: const TextStyle(fontSize: 16, color: Colors.black),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final themeColor = Colors.blue.shade600;
@@ -114,6 +153,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SizedBox(height: 20),
             _buildRoleDropdown(),
+            _buildIdentityCodeField(),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
