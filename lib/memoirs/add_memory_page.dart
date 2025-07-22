@@ -4,6 +4,34 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'memory_platform.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+Future<String?> uploadImageToImgur(File imageFile) async {
+  final bytes = await imageFile.readAsBytes();
+  final base64Image = base64Encode(bytes);
+
+  final response = await http.post(
+    Uri.parse('https://api.imgur.com/3/image'),
+    headers: {
+      'Authorization': 'Client-ID YOUR_IMGUR_CLIENT_ID', // ← 用你註冊 Imgur 拿到的 Client ID
+    },
+    body: {
+      'image': base64Image,
+      'type': 'base64',
+    },
+  );
+
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    return data['data']['link'];
+  } else {
+    debugPrint('Imgur 上傳失敗: ${response.body}');
+    return null;
+  }
+}
 
 class AddMemoryPage extends StatefulWidget {
   final List<String> categories;
@@ -17,7 +45,7 @@ class AddMemoryPage extends StatefulWidget {
 class _AddMemoryPageState extends State<AddMemoryPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  List<String> _imagePaths = [];
+  final List<String> _imagePaths = [];
   String? _recordedPath;
   bool _isRecording = false;
   late final MemoryPlatform recorder;
@@ -63,16 +91,35 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
   Future<void> _saveMemory() async {
     if (_titleController.text.trim().isEmpty) return;
 
-    final memory = {
+    setState(() {}); // 這裡可加 loading 狀態控制（略）
+
+    // 1. 上傳所有圖片到 Imgur
+    final List<String> uploadedUrls = [];
+
+    for (final path in _imagePaths) {
+      final file = File(path);
+      final url = await uploadImageToImgur(file);
+      if (url != null) {
+        uploadedUrls.add(url);
+      }
+    }
+
+    // 2. 上傳 Firestore
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    await FirebaseFirestore.instance.collection('memories').add({
+      'uid': uid,
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'images': _imagePaths.map((path) => File(path)).toList(),
-      'audioPath': _recordedPath,
       'category': _selectedCategory,
-    };
+      'imageUrls': uploadedUrls,
+      'audioPath': _recordedPath, // 若要上傳音檔也需走 Imgur 或其他平台
+      'createdAt': FieldValue.serverTimestamp(),
+    });
 
     if (!mounted) return;
-    Navigator.pop(context, memory);
+    Navigator.pop(context);
   }
 
   Widget _buildImageItem(String path) {
