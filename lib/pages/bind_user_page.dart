@@ -11,7 +11,29 @@ class BindUserPage extends StatefulWidget {
 
 class _BindUserPageState extends State<BindUserPage> {
   final TextEditingController _codeController = TextEditingController();
+  bool _hasBoundUser = false;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfHasBoundUser();
+  }
+
+  Future<void> _checkIfHasBoundUser() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final doc = await FirebaseFirestore.instance
+          .collection('caregivers')
+          .doc(currentUser.uid)
+          .get();
+
+    final data = doc.data();
+    if (data != null && data['boundUsers'] != null && (data['boundUsers'] as List).isNotEmpty) {
+      setState(() => _hasBoundUser = true);
+    }
+  }
 
   Future<void> _bindUser() async {
     final code = _codeController.text.trim();
@@ -50,30 +72,79 @@ class _BindUserPageState extends State<BindUserPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('綁定被照顧者')),
+      backgroundColor: const Color(0xFFF7F8FA),
+      appBar: AppBar(
+        title: const Text('綁定被照顧者'),
+        backgroundColor: Colors.teal, // 主色
+        foregroundColor: Colors.white,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('請輸入被照顧者識別碼以綁定'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _codeController,
-              decoration: const InputDecoration(
-                labelText: '識別碼',
-                border: OutlineInputBorder(),
+            const Text(
+              '請輸入被照顧者識別碼以綁定',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _bindUser,
-              child: _isLoading
-                  ? const CircularProgressIndicator()
-                  : const Text('綁定對象'),
+            TextField(
+              controller: _codeController,
+              decoration: InputDecoration(
+                labelText: '識別碼',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.vpn_key),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.teal.shade600),
+                ),
+              ),
             ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.link),
+              onPressed: _isLoading ? null : _bindUser,
+              label: _isLoading
+                  ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+                  : const Text('綁定對象'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade700,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                textStyle: const TextStyle(fontSize: 16),
+              ),
+            ),
+            if (_hasBoundUser) const SizedBox(height: 32),
+            if (_hasBoundUser)
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, '/selectUser');
+                },
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('返回選擇對象'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.teal.shade700,
+                  side: BorderSide(color: Colors.teal.shade200),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  textStyle: const TextStyle(fontSize: 15),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
+
+
 }

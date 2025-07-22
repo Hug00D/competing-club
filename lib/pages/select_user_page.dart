@@ -75,25 +75,84 @@ class _SelectUserPageState extends State<SelectUserPage> {
     Navigator.pushNamed(context, '/caregiver', arguments: userData);
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('選擇查看對象')),
+      backgroundColor: const Color(0xFFF0F2F5),
+      appBar: AppBar(
+        title: const Text('選擇查看對象'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+        elevation: 2,
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/bindUser');
+            },
+            tooltip: '新增綁定對象',
+            icon: const Icon(Icons.person_add),
+          ),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
+          : _linkedUsers.isEmpty
+          ? const Center(
+        child: Text(
+          '尚未綁定任何對象',
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+        ),
+      )
           : ListView.builder(
+        padding: const EdgeInsets.all(16),
         itemCount: _linkedUsers.length,
         itemBuilder: (context, index) {
           final user = _linkedUsers[index];
-          return ListTile(
-            leading: const Icon(Icons.person),
-            title: Text(user['name']),
-            subtitle: Text('識別碼：${user['identityCode']}'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () => _selectUser(user),
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color.fromARGB(13, 0, 0, 0),
+                  blurRadius: 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20, vertical: 14),
+              leading: CircleAvatar(
+                backgroundColor: Colors.teal.shade100,
+                radius: 24,
+                child: const Icon(Icons.person, color: Colors.teal),
+              ),
+              title: Text(
+                user['name'],
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              subtitle: Text(
+                '識別碼：${user['identityCode']}',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: Colors.black54,
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded,
+                  size: 26, color: Colors.teal),
+              onTap: () => _selectUser(user),
+            ),
           );
         },
       ),
     );
   }
+
 }

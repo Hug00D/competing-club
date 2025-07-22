@@ -1,15 +1,29 @@
 import 'package:flutter/material.dart';
 import 'user_task_page.dart';
 import 'task_statistics_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class CaregiverHomePage extends StatelessWidget {
   final Map<String, dynamic>? userData;
 
   const CaregiverHomePage({super.key, this.userData});
 
+
   @override
   Widget build(BuildContext context) {
-    final data = userData ?? ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    final routeData = ModalRoute.of(context)?.settings.arguments;
+    final Map<String, dynamic> data;
+
+    if (userData != null) {
+      data = userData!;
+    } else if (routeData != null && routeData is Map<String, dynamic>) {
+      data = routeData;
+    } else {
+      return Scaffold(
+        appBar: AppBar(title: const Text('錯誤')),
+        body: const Center(child: Text('找不到使用者資料，請重新登入')),
+      );
+    }
     final String name = data['name'] ?? '未命名';
     final String identityCode = data['identityCode'] ?? '無代碼';
 
@@ -45,10 +59,21 @@ class CaregiverHomePage extends StatelessWidget {
               label: '查看任務行事曆',
               color: Colors.teal,
               onTap: () {
+                final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
+                final caregiverName = '照顧者'; // 或使用 Firebase 資料裡的名稱
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => UserTaskPage(targetUid: data['uid']),
+                    builder: (_) => UserTaskPage(
+                      targetUid: data['uid'], // 被照顧者 UID
+                    ),
+                    settings: RouteSettings(
+                      arguments: {
+                        'fromCaregiver': true,
+                        'caregiverUid': caregiverUid,
+                        'caregiverName': caregiverName,
+                      },
+                    ),
                   ),
                 );
               },

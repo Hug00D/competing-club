@@ -66,6 +66,8 @@ class _UserTaskPageState extends State<UserTaskPage> {
   bool _isListening = false;
 
   late final String uid;
+  bool fromCaregiver = false;
+  String? caregiverUid;
   @override
   void initState() {
     super.initState();
@@ -73,6 +75,13 @@ class _UserTaskPageState extends State<UserTaskPage> {
     uid = widget.targetUid ?? user?.uid ?? '';
     loadTasksFromFirebase();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+      if (args != null) {
+        fromCaregiver = args['fromCaregiver'] == true;
+        caregiverUid = args['caregiverUid'];
+      }
+
       _scrollIfToday();
     });
   }
@@ -466,10 +475,27 @@ class _UserTaskPageState extends State<UserTaskPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  _buildFloatingMenuButton('主畫面', Icons.home, () {
+                  _buildFloatingMenuButton('主畫面', Icons.home, () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user == null) return;
+
+                    if (!context.mounted) return; // ✅ 確保 context 還活著
+
                     Navigator.pop(context);
-                    Navigator.pushNamed(context, '/mainMenu');
+                    if (fromCaregiver && caregiverUid != null) {
+                      Navigator.pushNamedAndRemoveUntil(
+                        context,
+                        '/caregiver',
+                            (route) => false,
+                        arguments: {
+                          'uid': caregiverUid,
+                        },
+                      );
+                    } else {
+                      Navigator.pushReplacementNamed(context, '/mainMenu');
+                    }
                   }),
+
                   const SizedBox(height: 12),
                   _buildFloatingMenuButton('回憶錄', Icons.photo_album, () {
                     Navigator.pop(context);
