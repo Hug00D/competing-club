@@ -16,7 +16,9 @@ class WebMemoryRecorder extends MemoryPlatform {
       _mediaRecorder = html.MediaRecorder(_mediaStream!);
       _mediaRecorder!.addEventListener('dataavailable', (event) {
         final e = event as html.BlobEvent;
-        if (e.data != null) _audioChunks.add(e.data!);
+        if (e.data != null) {
+          _audioChunks.add(e.data!);
+        }
       });
       _mediaRecorder!.addEventListener('stop', (_) {
         final blob = html.Blob(_audioChunks, 'audio/webm');
@@ -31,7 +33,7 @@ class WebMemoryRecorder extends MemoryPlatform {
   @override
   Future<Map<String, String?>> stopRecording() async {
     _mediaRecorder?.stop();
-    return {'audioPath': _webAudioUrl};
+    return {'path': null, 'webUrl': _webAudioUrl};
   }
 
   @override
@@ -42,5 +44,4 @@ class WebMemoryRecorder extends MemoryPlatform {
   }
 }
 
-// ✅ 提供平台專屬的實作函式
-MemoryPlatform getPlatformRecorderImpl() => WebMemoryRecorder();
+MemoryPlatform getPlatformRecorder() => WebMemoryRecorder();

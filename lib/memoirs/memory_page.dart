@@ -56,6 +56,7 @@ class _MemoryPageState extends State<MemoryPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // 首圖區
                         Stack(
                           alignment: Alignment.bottomLeft,
                           children: [
@@ -66,19 +67,19 @@ class _MemoryPageState extends State<MemoryPage> {
                               ),
                               child: memory.imagePaths.isNotEmpty
                                   ? Image.file(
-                                      File(memory.imagePaths.first),
-                                      fit: BoxFit.contain,
-                                      width: double.infinity,
-                                      errorBuilder: (_, __, ___) => Container(
-                                        height: 200,
-                                        color: Colors.grey[300],
-                                      ),
-                                    )
+                                File(memory.imagePaths.first),
+                                fit: BoxFit.contain,
+                                width: double.infinity,
+                                errorBuilder: (_, __, ___) => Container(
+                                  height: 200,
+                                  color: Colors.grey[300],
+                                ),
+                              )
                                   : Container(
-                                      height: 200,
-                                      width: double.infinity,
-                                      color: Colors.grey[300],
-                                    ),
+                                height: 200,
+                                width: double.infinity,
+                                color: Colors.grey[300],
+                              ),
                             ),
                             Positioned(
                               bottom: 20,
@@ -168,13 +169,15 @@ class _MemoryPageState extends State<MemoryPage> {
                 );
               },
             ),
+            // 編輯按鈕
             Positioned(
               bottom: 20,
               left: 20,
               right: 20,
               child: ElevatedButton(
                 onPressed: () async {
-                  Navigator.pop(context);
+                  Navigator.pop(context); // 關閉頁面
+
                   final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -186,14 +189,16 @@ class _MemoryPageState extends State<MemoryPage> {
                       ),
                     ),
                   );
+
                   if (result != null && result is Map<String, dynamic>) {
                     final updatedMemory = Memory(
                       title: result['title'],
                       description: result['description'],
                       date: DateTime.now(),
-                      imagePaths: (result['images'] as List?)?.cast<File>().map((f) => f.path).toList() ?? [],
+                      imagePaths: (result['images'] as List<File>).map((f) => f.path).toList(),
                       audioPath: result['audio'] ?? '',
                     );
+
                     setState(() {
                       final index = _memories.indexOf(memory);
                       if (index != -1) _memories[index] = updatedMemory;
@@ -219,24 +224,20 @@ class _MemoryPageState extends State<MemoryPage> {
   Future<void> _navigateToAddMemory() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AddMemoryPage()),
+      MaterialPageRoute(
+        builder: (_) => const AddMemoryPage(),
+      ),
     );
-    if (result != null) {
-      final title = result['title'] as String? ?? '';
-      final description = result['description'] as String? ?? '';
-      final audioPath = result['audioPath'] as String? ?? '';
-      final images = (result['images'] as List?)?.cast<File>() ?? [];
-      setState(() {
-        _memories.add(
-          Memory(
-            title: title,
-            description: description,
-            date: DateTime.now(),
-            imagePaths: images.map((f) => f.path).toList(),
-            audioPath: audioPath,
-          ),
-        );
-      });
+
+    if (result != null && result is Map<String, dynamic>) {
+      final newMemory = Memory(
+        title: result['title'],
+        description: result['description'] ?? '',
+        date: DateTime.now(),
+        imagePaths: (result['images'] as List<File>).map((f) => f.path).toList(),
+        audioPath: result['audio'] ?? '',
+      );
+      setState(() => _memories.add(newMemory));
     }
   }
 
@@ -253,85 +254,85 @@ class _MemoryPageState extends State<MemoryPage> {
       body: _memories.isEmpty
           ? const Center(child: Text('尚未新增任何回憶'))
           : GridView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: _memories.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 3 / 4,
+        padding: const EdgeInsets.all(12),
+        itemCount: _memories.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 3 / 4,
+        ),
+        itemBuilder: (context, index) {
+          final memory = _memories[index];
+          return GestureDetector(
+            onTap: () => _showMemoryDetail(memory),
+            child: Card(
+              elevation: 4,
+              color: Colors.black87,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              itemBuilder: (context, index) {
-                final memory = _memories[index];
-                return GestureDetector(
-                  onTap: () => _showMemoryDetail(memory),
-                  child: Card(
-                    elevation: 4,
-                    color: Colors.black87,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  memory.imagePaths.isNotEmpty
+                      ? ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(12),
+                      topRight: Radius.circular(12),
                     ),
+                    child: Image.file(
+                      File(memory.imagePaths.first),
+                      width: double.infinity,
+                      height: 150,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 150,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                  )
+                      : Container(
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[400],
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        topRight: Radius.circular(12),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        memory.imagePaths.isNotEmpty
-                            ? ClipRRect(
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(12),
-                                  topRight: Radius.circular(12),
-                                ),
-                                child: Image.file(
-                                  File(memory.imagePaths.first),
-                                  width: double.infinity,
-                                  height: 150,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    height: 150,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                              )
-                            : Container(
-                                height: 150,
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[400],
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(12),
-                                    topRight: Radius.circular(12),
-                                  ),
-                                ),
-                              ),
-                        Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                memory.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                memory.date.toString().substring(0, 16),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                            ],
+                        Text(
+                          memory.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          memory.date.toString().substring(0, 16),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white70,
                           ),
                         ),
                       ],
                     ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToAddMemory,
         backgroundColor: Colors.deepPurple,

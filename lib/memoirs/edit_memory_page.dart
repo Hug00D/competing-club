@@ -27,7 +27,7 @@ class EditMemoryPage extends StatefulWidget {
 class _EditMemoryPageState extends State<EditMemoryPage> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
-  late List<String> _imagePaths;
+  late List<File> _imageFiles;
   String? _recordedPath;
   bool _isRecording = false;
   late final MemoryPlatform recorder;
@@ -37,7 +37,7 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
     super.initState();
     _titleController = TextEditingController(text: widget.title);
     _descriptionController = TextEditingController(text: widget.description);
-    _imagePaths = [...widget.imagePaths];
+    _imageFiles = widget.imagePaths.map((p) => File(p)).toList();
     _recordedPath = widget.audioPath;
     recorder = getPlatformRecorder();
   }
@@ -46,18 +46,18 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
     final pickedFiles = await ImagePicker().pickMultiImage();
     if (pickedFiles.isNotEmpty) {
       setState(() {
-        _imagePaths.addAll(pickedFiles.map((e) => e.path));
+        _imageFiles.addAll(pickedFiles.map((e) => File(e.path)));
       });
     }
   }
 
   Future<void> _createBlackImageIfNeeded() async {
-    if (_imagePaths.isEmpty) {
+    if (_imageFiles.isEmpty) {
       final Uint8List blackBytes = Uint8List.fromList(List.generate(100 * 100 * 4, (i) => 0));
       final directory = await getTemporaryDirectory();
       final blackImage = File('${directory.path}/black_${DateTime.now().millisecondsSinceEpoch}.png');
       await blackImage.writeAsBytes(blackBytes);
-      _imagePaths.add(blackImage.path);
+      _imageFiles.add(blackImage);
     }
   }
 
@@ -69,7 +69,7 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
   Future<void> _stopRecording() async {
     final result = await recorder.stopRecording();
     setState(() {
-      _recordedPath = result['audioPath'];
+      _recordedPath = result['path'];
       _isRecording = false;
     });
   }
@@ -84,21 +84,23 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
 
   Future<void> _saveMemory() async {
     await _createBlackImageIfNeeded();
+
     final updatedMemory = {
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'images': _imagePaths.map((path) => File(path)).toList(),
+      'images': _imageFiles,
       'audio': _recordedPath,
     };
+
     Navigator.pop(context, updatedMemory);
   }
 
-  Widget _buildImageItem(String path) {
+  Widget _buildImageItem(File file) {
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.file(File(path), width: 100, height: 100, fit: BoxFit.cover),
+          child: Image.file(file, width: 100, height: 100, fit: BoxFit.cover),
         ),
         Positioned(
           top: -8,
@@ -112,7 +114,7 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
             ),
             onPressed: () {
               setState(() {
-                _imagePaths.remove(path);
+                _imageFiles.remove(file);
               });
             },
           ),
@@ -144,12 +146,11 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
               ),
             ),
             const SizedBox(height: 16),
-            if (_imagePaths.isNotEmpty)
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: _imagePaths.map(_buildImageItem).toList(),
-              ),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _imageFiles.map(_buildImageItem).toList(),
+            ),
             TextButton.icon(
               icon: const Icon(Icons.add_photo_alternate),
               label: const Text('新增圖片'),
