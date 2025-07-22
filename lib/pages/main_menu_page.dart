@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'memory_page.dart';
+import 'package:memory/memoirs/memory_page.dart';
 import 'user_task_page.dart';
 
 class MainMenuPage extends StatelessWidget {
