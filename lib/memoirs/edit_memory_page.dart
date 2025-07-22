@@ -11,6 +11,8 @@ class EditMemoryPage extends StatefulWidget {
   final String description;
   final List<String> imagePaths;
   final String audioPath;
+  final String category;
+  final List<String> categories;
 
   const EditMemoryPage({
     super.key,
@@ -18,6 +20,8 @@ class EditMemoryPage extends StatefulWidget {
     required this.description,
     required this.imagePaths,
     required this.audioPath,
+    required this.category,
+    required this.categories,
   });
 
   @override
@@ -27,37 +31,39 @@ class EditMemoryPage extends StatefulWidget {
 class _EditMemoryPageState extends State<EditMemoryPage> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
-  late List<File> _imageFiles;
+  late List<String> _imagePaths;
   String? _recordedPath;
   bool _isRecording = false;
   late final MemoryPlatform recorder;
+  late String _selectedCategory;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.title);
     _descriptionController = TextEditingController(text: widget.description);
-    _imageFiles = widget.imagePaths.map((p) => File(p)).toList();
+    _imagePaths = [...widget.imagePaths];
     _recordedPath = widget.audioPath;
     recorder = getPlatformRecorder();
+    _selectedCategory = widget.category;
   }
 
   Future<void> _pickImages() async {
     final pickedFiles = await ImagePicker().pickMultiImage();
     if (pickedFiles.isNotEmpty) {
       setState(() {
-        _imageFiles.addAll(pickedFiles.map((e) => File(e.path)));
+        _imagePaths.addAll(pickedFiles.map((e) => e.path));
       });
     }
   }
 
   Future<void> _createBlackImageIfNeeded() async {
-    if (_imageFiles.isEmpty) {
+    if (_imagePaths.isEmpty) {
       final Uint8List blackBytes = Uint8List.fromList(List.generate(100 * 100 * 4, (i) => 0));
       final directory = await getTemporaryDirectory();
       final blackImage = File('${directory.path}/black_${DateTime.now().millisecondsSinceEpoch}.png');
       await blackImage.writeAsBytes(blackBytes);
-      _imageFiles.add(blackImage);
+      _imagePaths.add(blackImage.path);
     }
   }
 
@@ -69,7 +75,7 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
   Future<void> _stopRecording() async {
     final result = await recorder.stopRecording();
     setState(() {
-      _recordedPath = result['path'];
+      _recordedPath = result['audioPath'];
       _isRecording = false;
     });
   }
@@ -84,23 +90,22 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
 
   Future<void> _saveMemory() async {
     await _createBlackImageIfNeeded();
-
     final updatedMemory = {
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'images': _imageFiles,
+      'images': _imagePaths.map((path) => File(path)).toList(),
       'audio': _recordedPath,
+      'category': _selectedCategory,
     };
-
     Navigator.pop(context, updatedMemory);
   }
 
-  Widget _buildImageItem(File file) {
+  Widget _buildImageItem(String path) {
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.file(file, width: 100, height: 100, fit: BoxFit.cover),
+          child: Image.file(File(path), width: 100, height: 100, fit: BoxFit.cover),
         ),
         Positioned(
           top: -8,
@@ -114,7 +119,7 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
             ),
             onPressed: () {
               setState(() {
-                _imageFiles.remove(file);
+                _imagePaths.remove(path);
               });
             },
           ),
@@ -145,12 +150,28 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
                 alignLabelWithHint: true,
               ),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: _imageFiles.map(_buildImageItem).toList(),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedCategory,
+              items: widget.categories
+                  .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedCategory = value;
+                  });
+                }
+              },
+              decoration: const InputDecoration(labelText: '分類'),
             ),
+            const SizedBox(height: 16),
+            if (_imagePaths.isNotEmpty)
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _imagePaths.map(_buildImageItem).toList(),
+              ),
             TextButton.icon(
               icon: const Icon(Icons.add_photo_alternate),
               label: const Text('新增圖片'),

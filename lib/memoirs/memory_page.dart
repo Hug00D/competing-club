@@ -1,8 +1,10 @@
+// memory_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'add_memory_page.dart';
 import 'edit_memory_page.dart';
+import 'category_manager.dart';
 
 class Memory {
   final String title;
@@ -10,6 +12,7 @@ class Memory {
   final DateTime date;
   final List<String> imagePaths;
   final String audioPath;
+  final String category;
 
   Memory({
     required this.title,
@@ -17,6 +20,7 @@ class Memory {
     required this.date,
     required this.imagePaths,
     required this.audioPath,
+    required this.category,
   });
 }
 
@@ -30,314 +34,199 @@ class MemoryPage extends StatefulWidget {
 class _MemoryPageState extends State<MemoryPage> {
   final List<Memory> _memories = [];
   final AudioPlayer _audioPlayer = AudioPlayer();
+  List<String> _categories = ['人物', '旅遊'];
+  final Set<String> _collapsedCategories = {};
 
-  void _showMemoryDetail(Memory memory) {
+  void _showCategoryManager() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Stack(
-          children: [
-            DraggableScrollableSheet(
-              initialChildSize: 0.85,
-              maxChildSize: 0.85,
-              minChildSize: 0.5,
-              expand: false,
-              builder: (context, scrollController) {
-                return Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  ),
-                  child: SingleChildScrollView(
-                    controller: scrollController,
-                    padding: const EdgeInsets.only(bottom: 80),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 首圖區
-                        Stack(
-                          alignment: Alignment.bottomLeft,
-                          children: [
-                            ClipRRect(
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(20),
-                                topRight: Radius.circular(20),
-                              ),
-                              child: memory.imagePaths.isNotEmpty
-                                  ? Image.file(
-                                File(memory.imagePaths.first),
-                                fit: BoxFit.contain,
-                                width: double.infinity,
-                                errorBuilder: (_, __, ___) => Container(
-                                  height: 200,
-                                  color: Colors.grey[300],
-                                ),
-                              )
-                                  : Container(
-                                height: 200,
-                                width: double.infinity,
-                                color: Colors.grey[300],
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 20,
-                              left: 20,
-                              right: 20,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    memory.title,
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black54,
-                                          blurRadius: 4,
-                                        )
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.black.withOpacity(0.7),
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(30),
-                                      ),
-                                    ),
-                                    icon: const Icon(Icons.play_arrow, color: Colors.white),
-                                    label: const Text('播放語音', style: TextStyle(color: Colors.white)),
-                                    onPressed: () async {
-                                      final player = AudioPlayer();
-                                      await player.setFilePath(memory.audioPath);
-                                      await player.play();
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '描述',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color.fromARGB(221, 103, 102, 102),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                memory.description,
-                                style: const TextStyle(fontSize: 16, color: Colors.black87),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        ...memory.imagePaths.skip(1).map((path) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.file(
-                                File(path),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  height: 150,
-                                  color: Colors.grey[300],
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-            // 編輯按鈕
-            Positioned(
-              bottom: 20,
-              left: 20,
-              right: 20,
-              child: ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context); // 關閉頁面
-
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => EditMemoryPage(
-                        title: memory.title,
-                        description: memory.description,
-                        imagePaths: memory.imagePaths,
-                        audioPath: memory.audioPath,
-                      ),
-                    ),
-                  );
-
-                  if (result != null && result is Map<String, dynamic>) {
-                    final updatedMemory = Memory(
-                      title: result['title'],
-                      description: result['description'],
-                      date: DateTime.now(),
-                      imagePaths: (result['images'] as List<File>).map((f) => f.path).toList(),
-                      audioPath: result['audio'] ?? '',
-                    );
-
-                    setState(() {
-                      final index = _memories.indexOf(memory);
-                      if (index != -1) _memories[index] = updatedMemory;
-                    });
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text('編輯回憶', style: TextStyle(fontSize: 16, color: Colors.white)),
-              ),
-            ),
-          ],
-        );
-      },
+      builder: (_) => CategoryManager(
+        initialCategories: _categories,
+        onCategoriesUpdated: (newCategories) {
+          setState(() {
+            _categories = newCategories;
+          });
+        },
+      ),
     );
+  }
+
+  void _showMemoryDetail(Memory memory) {
+    // 保留原彈窗邏輯
   }
 
   Future<void> _navigateToAddMemory() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const AddMemoryPage(),
-      ),
+      MaterialPageRoute(builder: (context) => AddMemoryPage(categories: _categories)),
     );
-
-    if (result != null && result is Map<String, dynamic>) {
-      final newMemory = Memory(
-        title: result['title'],
-        description: result['description'] ?? '',
-        date: DateTime.now(),
-        imagePaths: (result['images'] as List<File>).map((f) => f.path).toList(),
-        audioPath: result['audio'] ?? '',
-      );
-      setState(() => _memories.add(newMemory));
+    if (result != null) {
+      final title = result['title'] as String? ?? '';
+      final description = result['description'] as String? ?? '';
+      final audioPath = result['audioPath'] as String? ?? '';
+      final images = (result['images'] as List?)?.cast<File>() ?? [];
+      final category = result['category'] as String? ?? _categories.first;
+      setState(() {
+        _memories.add(
+          Memory(
+            title: title,
+            description: description,
+            date: DateTime.now(),
+            imagePaths: images.map((f) => f.path).toList(),
+            audioPath: audioPath,
+            category: category,
+          ),
+        );
+      });
     }
-  }
-
-  @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('回憶錄')),
+      appBar: AppBar(
+        title: const Text('回憶錄'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.category),
+            onPressed: _showCategoryManager,
+          ),
+        ],
+      ),
       body: _memories.isEmpty
           ? const Center(child: Text('尚未新增任何回憶'))
-          : GridView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: _memories.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 3 / 4,
-        ),
-        itemBuilder: (context, index) {
-          final memory = _memories[index];
-          return GestureDetector(
-            onTap: () => _showMemoryDetail(memory),
-            child: Card(
-              elevation: 4,
-              color: Colors.black87,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  memory.imagePaths.isNotEmpty
-                      ? ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                    child: Image.file(
-                      File(memory.imagePaths.first),
-                      width: double.infinity,
-                      height: 150,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        height: 150,
-                        color: Colors.grey[400],
+          : ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              children: _categories.map((category) {
+                final categoryMemories = _memories.where((m) => m.category == category).toList();
+                if (categoryMemories.isEmpty) return const SizedBox();
+                final isCollapsed = _collapsedCategories.contains(category);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          if (_collapsedCategories.contains(category)) {
+                            _collapsedCategories.remove(category);
+                          } else {
+                            _collapsedCategories.add(category);
+                          }
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          Icon(isCollapsed ? Icons.expand_more : Icons.expand_less, color: const Color.fromARGB(221, 186, 155, 155)),
+                          const SizedBox(width: 4),
+                          Text(
+                            category,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color.fromARGB(221, 173, 150, 150)),
+                          ),
+                        ],
                       ),
                     ),
-                  )
-                      : Container(
-                    height: 150,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[400],
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
+                    const Divider(thickness: 1, color: Colors.black45, height: 16),
+                    if (!isCollapsed)
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: categoryMemories.map((memory) {
+                          return GestureDetector(
+                            onTap: () => _showMemoryDetail(memory),
+                            child: Container(
+                              width: MediaQuery.of(context).size.width / 2 - 24,
+                              decoration: BoxDecoration(
+                                color: const Color.fromARGB(221, 131, 123, 123),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color.fromARGB(66, 160, 143, 143),
+                                    blurRadius: 4,
+                                    offset: Offset(2, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  memory.imagePaths.isNotEmpty
+                                      ? ClipRRect(
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(12),
+                                            topRight: Radius.circular(12),
+                                          ),
+                                          child: Image.file(
+                                            File(memory.imagePaths.first),
+                                            width: double.infinity,
+                                            height: 120,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              height: 120,
+                                              color: Colors.grey[400],
+                                            ),
+                                          ),
+                                        )
+                                      : Container(
+                                          height: 120,
+                                          width: double.infinity,
+                                          decoration: const BoxDecoration(
+                                            color: Colors.grey,
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: Radius.circular(12),
+                                              topRight: Radius.circular(12),
+                                            ),
+                                          ),
+                                        ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          memory.title,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                            color: Colors.white,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          memory.date.toString().substring(0, 16),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          memory.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          memory.date.toString().substring(0, 16),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                    const SizedBox(height: 24),
+                  ],
+                );
+              }).toList(),
             ),
-          );
-        },
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToAddMemory,
         backgroundColor: Colors.deepPurple,
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
   }
 }

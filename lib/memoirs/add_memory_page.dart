@@ -6,7 +6,9 @@ import 'package:just_audio/just_audio.dart';
 import 'memory_platform.dart';
 
 class AddMemoryPage extends StatefulWidget {
-  const AddMemoryPage({super.key});
+  final List<String> categories;
+
+  const AddMemoryPage({super.key, required this.categories});
 
   @override
   State<AddMemoryPage> createState() => _AddMemoryPageState();
@@ -15,15 +17,17 @@ class AddMemoryPage extends StatefulWidget {
 class _AddMemoryPageState extends State<AddMemoryPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  List<String> _imagePaths = []; // ✅ path-only
+  List<String> _imagePaths = [];
   String? _recordedPath;
   bool _isRecording = false;
   late final MemoryPlatform recorder;
+  late String _selectedCategory;
 
   @override
   void initState() {
     super.initState();
     recorder = getPlatformRecorder();
+    _selectedCategory = widget.categories.first;
   }
 
   Future<void> _pickImages() async {
@@ -43,7 +47,7 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
   Future<void> _stopRecording() async {
     final result = await recorder.stopRecording();
     setState(() {
-      _recordedPath = result['path'];
+      _recordedPath = result['audioPath'];
       _isRecording = false;
     });
   }
@@ -62,12 +66,13 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
     final memory = {
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'imagePaths': _imagePaths, // ✅ List<String>
+      'images': _imagePaths.map((path) => File(path)).toList(),
       'audioPath': _recordedPath,
+      'category': _selectedCategory,
     };
 
     if (!mounted) return;
-    Navigator.pop(context, memory); // ✅ Web-safe
+    Navigator.pop(context, memory);
   }
 
   Widget _buildImageItem(String path) {
@@ -121,6 +126,21 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
                 hintText: '請輸入描述內容（選填）',
                 alignLabelWithHint: true,
               ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedCategory,
+              items: widget.categories
+                  .map((cat) => DropdownMenuItem(value: cat, child: Text(cat)))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedCategory = value;
+                  });
+                }
+              },
+              decoration: const InputDecoration(labelText: '分類'),
             ),
             const SizedBox(height: 16),
             if (_imagePaths.isNotEmpty)
