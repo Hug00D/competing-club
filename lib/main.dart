@@ -4,11 +4,9 @@ import 'pages/role_selection_page.dart';
 import 'pages/user_task_page.dart';
 import 'pages/caregiver_home_page.dart';
 import 'pages/main_menu_page.dart';
-import 'pages/memory_page.dart';
+import 'memoirs/memory_page.dart';
 import 'pages/register_page.dart';
 import 'pages/profile_page.dart';
-import 'pages/bind_user_page.dart';
-import 'pages/select_user_page.dart';
 import 'firebase_options.dart'; // 用 FlutterFire CLI 產生
 import 'package:firebase_core/firebase_core.dart';
 
@@ -41,8 +39,6 @@ class MemoryAssistantApp extends StatelessWidget {
         '/memory': (context) => const MemoryPage(),
         '/register': (context) => const RegisterPage(),
         '/profile': (context) => const ProfilePage(),
-        '/bindUser': (context) => const BindUserPage(),
-        '/selectUser': (context) => const SelectUserPage(),
       },
     );
   }
