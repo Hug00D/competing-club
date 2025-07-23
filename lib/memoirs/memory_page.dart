@@ -6,16 +6,19 @@ import 'add_memory_page.dart';
 import 'category_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'edit_memory_page.dart';
 
 class Memory {
+  final String id;
   final String title;
   final String description;
   final DateTime date;
   final List<String> imagePaths;
-  final String audioPath; // 暫時不處理音檔
+  final String audioPath;
   final String category;
 
   Memory({
+    required this.id,
     required this.title,
     required this.description,
     required this.date,
@@ -24,24 +27,25 @@ class Memory {
     required this.category,
   });
 
-  factory Memory.fromFirestore(Map<String, dynamic> data) {
+  factory Memory.fromFirestore(String docId, Map<String, dynamic> data) {
     final imageList = data['imageUrls'];
     List<String> imagePaths = [];
-
     if (imageList is List) {
       imagePaths = imageList.whereType<String>().toList();
     }
-
     return Memory(
+      id: docId,
       title: data['title'] ?? '',
       description: data['description'] ?? '',
       date: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       imagePaths: imagePaths,
-      audioPath: '', // 暫時忽略
+      audioPath: data['audioPath'] ?? '',
       category: data['category'] ?? '',
     );
   }
 }
+
+
 
 class MemoryPage extends StatefulWidget {
   const MemoryPage({super.key});
@@ -85,7 +89,7 @@ class _MemoryPageState extends State<MemoryPage> {
           .get();
 
       final memories = snapshot.docs
-          .map((doc) => Memory.fromFirestore(doc.data()))
+          .map((doc) => Memory.fromFirestore(doc.id, doc.data() as Map<String, dynamic>))
           .toList();
 
       setState(() {
@@ -132,82 +136,206 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  void _showMemoryDetail(Memory memory) {
+   void _showMemoryDetail(Memory memory) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) {
-        return FractionallySizedBox(
-          heightFactor: 0.9,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // 標題
-                Text(
-                  memory.title,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 8),
-
-                // 描述
-                if (memory.description.isNotEmpty)
-                  Text(
-                    memory.description,
-                    style: TextStyle(fontSize: 16, color: Colors.grey[800]),
-                  ),
-
-                SizedBox(height: 16),
-
-                // 圖片列表（第一張為主圖，可點擊放大）
-                if (memory.imagePaths.isNotEmpty)
-                  Expanded(
-                    child: ListView(
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          maxChildSize: 0.85,
+          minChildSize: 0.5,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Stack(
+                children: [
+                  SingleChildScrollView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.only(bottom: 100),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        GestureDetector(
-                          onTap: () => _showFullScreenImage(memory.imagePaths.first),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              memory.imagePaths.first,
-                              fit: BoxFit.cover,
+                        Stack(
+                          alignment: Alignment.bottomLeft,
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(20),
+                                topRight: Radius.circular(20),
+                              ),
+                              child: memory.imagePaths.isNotEmpty
+                                  ? Image.network(
+                                    memory.imagePaths.first,
+                                    fit: BoxFit.contain,
+                                    width: double.infinity,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 200,
+                                      color: Colors.grey[300],
+                                    ),
+                                  )
+                                  : Container(
+                                      height: 200,
+                                      width: double.infinity,
+                                      color: Colors.grey[300],
+                                    ),
                             ),
+                            Positioned(
+                              bottom: 20,
+                              left: 20,
+                              right: 20,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    memory.title,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black54,
+                                          blurRadius: 4,
+                                        )
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.black.withOpacity(0.7),
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(30),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.play_arrow, color: Colors.white),
+                                    label: const Text('播放語音', style: TextStyle(color: Colors.white)),
+                                    onPressed: () async {
+                                      final player = AudioPlayer();
+
+                                      try {
+                                        if (memory.audioPath.startsWith('http')) {
+                                          await player.setUrl(memory.audioPath); // 遠端播放
+                                        } else {
+                                          await player.setFilePath(memory.audioPath); // 本地播放
+                                        }
+                                        await player.play();
+                                      } catch (e) {
+                                        debugPrint('播放失敗: $e');
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('無法播放語音')),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '描述',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color.fromARGB(221, 103, 102, 102),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                memory.description,
+                                style: const TextStyle(fontSize: 16, color: Colors.black87),
+                              ),
+                            ],
                           ),
                         ),
-                        SizedBox(height: 12),
-                        ...memory.imagePaths.skip(1).map((url) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(url, fit: BoxFit.cover),
-                          ),
-                        )),
+                        const SizedBox(height: 20),
+                        ...memory.imagePaths.skip(1).map((path) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                path,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  height: 150,
+                                  color: Colors.grey[300],
+                                ),
+                              )
+                            ),
+                          );
+                        }).toList(),
+                        const SizedBox(height: 100),
                       ],
                     ),
                   ),
-
-                // 底部固定按鈕區
-                SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  Positioned(
+                    bottom: 20,
+                    left: 20,
+                    right: 20,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditMemoryPage(
+                            docId: memory.id, // ← 你需要確保記憶物件有這個欄位
+                            title: memory.title,
+                            description: memory.description,
+                            imagePaths: memory.imagePaths,
+                            audioPath: memory.audioPath,
+                            category: memory.category,
+                            categories: _categories,
+                          ),
+                          ),
+                        );
+                        if (result != null) {
+                          setState(() {
+                            final index = _memories.indexOf(memory);
+                            if (index != -1) {
+                              _memories[index] = Memory(
+                                id: memory.id,
+                                title: result['title'],
+                                description: result['description'],
+                                date: memory.date,
+                                imagePaths: (result['images'] as List).cast<String>(), // ✅ Cloudinary 回傳是 URL 字串
+                                audioPath: result['audio'],
+                                category: result['category'],
+                              );
+                            }
+                          });
+                          Navigator.pop(context);
+                        }
+                      },
+                      icon: const Icon(Icons.edit),
+                      label: const Text('編輯回憶'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
                     ),
                   ),
-                  child: Text('關閉'),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -228,13 +356,14 @@ class _MemoryPageState extends State<MemoryPage> {
       setState(() {
         _memories.add(
           Memory(
-            title: title,
-            description: description,
-            date: DateTime.now(),
-            imagePaths: images.map((f) => f.path).toList(),
-            audioPath: audioPath,
-            category: category,
-          ),
+          id: '', // or 'local-temp-id'
+          title: title,
+          description: description,
+          date: DateTime.now(),
+          imagePaths: images.map((f) => f.path).toList(),
+          audioPath: audioPath,
+          category: category,
+        ),
         );
       });
     }
@@ -269,6 +398,7 @@ class _MemoryPageState extends State<MemoryPage> {
           final allMemories = snapshot.data!.docs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             return Memory(
+              id: doc.id, // ✅ 使用 doc.id 作為 id
               title: data['title'] ?? '',
               description: data['description'] ?? '',
               date: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),

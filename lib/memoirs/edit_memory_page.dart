@@ -1,12 +1,14 @@
+// ✅ edit_memory_page.dart
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'memory_platform.dart';
+import 'cloudinary_upload.dart';
 
 class EditMemoryPage extends StatefulWidget {
+  final String docId;
   final String title;
   final String description;
   final List<String> imagePaths;
@@ -16,6 +18,7 @@ class EditMemoryPage extends StatefulWidget {
 
   const EditMemoryPage({
     super.key,
+    required this.docId,
     required this.title,
     required this.description,
     required this.imagePaths,
@@ -34,6 +37,7 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
   late List<String> _imagePaths;
   String? _recordedPath;
   bool _isRecording = false;
+  bool _isSaving = false;
   late final MemoryPlatform recorder;
   late String _selectedCategory;
 
@@ -44,8 +48,8 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
     _descriptionController = TextEditingController(text: widget.description);
     _imagePaths = [...widget.imagePaths];
     _recordedPath = widget.audioPath;
-    recorder = getPlatformRecorder();
     _selectedCategory = widget.category;
+    recorder = getPlatformRecorder();
   }
 
   Future<void> _pickImages() async {
@@ -54,16 +58,6 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
       setState(() {
         _imagePaths.addAll(pickedFiles.map((e) => e.path));
       });
-    }
-  }
-
-  Future<void> _createBlackImageIfNeeded() async {
-    if (_imagePaths.isEmpty) {
-      final Uint8List blackBytes = Uint8List.fromList(List.generate(100 * 100 * 4, (i) => 0));
-      final directory = await getTemporaryDirectory();
-      final blackImage = File('${directory.path}/black_${DateTime.now().millisecondsSinceEpoch}.png');
-      await blackImage.writeAsBytes(blackBytes);
-      _imagePaths.add(blackImage.path);
     }
   }
 
@@ -89,15 +83,48 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
   }
 
   Future<void> _saveMemory() async {
-    await _createBlackImageIfNeeded();
-    final updatedMemory = {
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請輸入回憶標題')),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    final List<String> uploadedImageUrls = [];
+    for (final path in _imagePaths) {
+      if (path.startsWith('http')) {
+        uploadedImageUrls.add(path);
+      } else {
+        final file = File(path);
+        final url = await uploadFileToCloudinary(file, isImage: true);
+        if (url != null) uploadedImageUrls.add(url);
+      }
+    }
+
+    String? uploadedAudioUrl = _recordedPath;
+    if (_recordedPath != null && !_recordedPath!.startsWith('http')) {
+      final audioFile = File(_recordedPath!);
+      final audioUrl = await uploadFileToCloudinary(audioFile, isImage: false);
+      if (audioUrl != null) uploadedAudioUrl = audioUrl;
+    }
+
+    await FirebaseFirestore.instance.collection('memories').doc(widget.docId).update({
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'images': _imagePaths.map((path) => File(path)).toList(),
-      'audio': _recordedPath,
       'category': _selectedCategory,
-    };
-    Navigator.pop(context, updatedMemory);
+      'imageUrls': uploadedImageUrls,
+      'audioPath': uploadedAudioUrl,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('回憶已更新')),
+    );
+    Navigator.pop(context, true);
+    setState(() => _isSaving = false);
   }
 
   Widget _buildImageItem(String path) {
@@ -105,7 +132,9 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.file(File(path), width: 100, height: 100, fit: BoxFit.cover),
+          child: path.startsWith('http')
+              ? Image.network(path, width: 100, height: 100, fit: BoxFit.cover)
+              : Image.file(File(path), width: 100, height: 100, fit: BoxFit.cover),
         ),
         Positioned(
           top: -8,
@@ -158,9 +187,7 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
                   .toList(),
               onChanged: (value) {
                 if (value != null) {
-                  setState(() {
-                    _selectedCategory = value;
-                  });
+                  setState(() => _selectedCategory = value);
                 }
               },
               decoration: const InputDecoration(labelText: '分類'),
@@ -199,14 +226,16 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _saveMemory,
+              onPressed: _isSaving ? null : _saveMemory,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: const Text('儲存回憶', style: TextStyle(color: Colors.white)),
+              child: _isSaving
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text('儲存回憶', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
