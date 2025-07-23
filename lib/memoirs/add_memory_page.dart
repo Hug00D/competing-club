@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'cloudinary_upload.dart';
 
 Future<String?> uploadImageToImgur(File imageFile) async {
   final bytes = await imageFile.readAsBytes();
@@ -91,36 +92,33 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
   Future<void> _saveMemory() async {
     if (_titleController.text.trim().isEmpty) return;
 
-    setState(() {}); // 這裡可加 loading 狀態控制（略）
-
-    // 1. 上傳所有圖片到 Imgur
-    final List<String> uploadedUrls = [];
-
-    for (final path in _imagePaths) {
-      final file = File(path);
-      final url = await uploadImageToImgur(file);
-      if (url != null) {
-        uploadedUrls.add(url);
-      }
-    }
-
-    // 2. 上傳 Firestore
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+
+    // 上傳所有圖片
+    final List<String> uploadedImageUrls = [];
+    for (final path in _imagePaths) {
+      final file = File(path);
+      final url = await uploadImageToCloudinary(file);
+      if (url != null) {
+        uploadedImageUrls.add(url);
+      }
+    }
 
     await FirebaseFirestore.instance.collection('memories').add({
       'uid': uid,
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
       'category': _selectedCategory,
-      'imageUrls': uploadedUrls,
-      'audioPath': _recordedPath, // 若要上傳音檔也需走 Imgur 或其他平台
+      'imageUrls': uploadedImageUrls,
+      'audioPath': _recordedPath,
       'createdAt': FieldValue.serverTimestamp(),
     });
 
     if (!mounted) return;
     Navigator.pop(context);
   }
+
 
   Widget _buildImageItem(String path) {
     return Stack(
