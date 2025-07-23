@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'memory_platform.dart';
-import 'cloudinary_upload.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'cloudinary_upload.dart';
 
 class AddMemoryPage extends StatefulWidget {
   final List<String> categories;
@@ -23,7 +23,6 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
   final List<String> _imagePaths = [];
   String? _recordedPath;
   bool _isRecording = false;
-  bool _isSaving = false;
   late final MemoryPlatform recorder;
   late String _selectedCategory;
 
@@ -65,62 +64,44 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
   }
 
   Future<void> _saveMemory() async {
-    debugPrint('開始儲存記憶');
-
-    if (_titleController.text.trim().isEmpty) {
-      debugPrint('標題為空，中止儲存');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('請輸入回憶標題')),
-      );
-      return;
-    }
+    if (_titleController.text.trim().isEmpty) return;
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      debugPrint('找不到登入使用者');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('尚未登入')),
-      );
-      return;
-    }
+    if (uid == null) return;
 
-    setState(() => _isSaving = true);
-
+    // 上傳所有圖片
     final List<String> uploadedImageUrls = [];
     for (final path in _imagePaths) {
       final file = File(path);
-      debugPrint('正在上傳圖片: $path');
       final url = await uploadImageToCloudinary(file);
       if (url != null) {
         uploadedImageUrls.add(url);
-        debugPrint('圖片上傳成功: $url');
-      } else {
-        debugPrint('圖片上傳失敗，跳過');
       }
     }
 
-    debugPrint('即將寫入 Firestore');
+    // 上傳音檔（使用 Cloudinary video API）
+    String? uploadedAudioUrl;
+    if (_recordedPath != null) {
+      final audioFile = File(_recordedPath!);
+      uploadedAudioUrl = await uploadFileToCloudinary(audioFile, isImage: false);
+    }
 
+    // 儲存到 Firestore
     await FirebaseFirestore.instance.collection('memories').add({
       'uid': uid,
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
       'category': _selectedCategory,
       'imageUrls': uploadedImageUrls,
-      'audioPath': _recordedPath,
+      'audioPath': uploadedAudioUrl ?? '',
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    debugPrint('Firestore 寫入完成');
-
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('回憶已儲存')),
-    );
-    Navigator.pop(context, true); // 回傳 true 讓上一頁可以重新整理
-
-    setState(() => _isSaving = false);
+    Navigator.pop(context);
   }
+
+
 
   Widget _buildImageItem(String path) {
     return Stack(
@@ -182,7 +163,9 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
                   .toList(),
               onChanged: (value) {
                 if (value != null) {
-                  setState(() => _selectedCategory = value);
+                  setState(() {
+                    _selectedCategory = value;
+                  });
                 }
               },
               decoration: const InputDecoration(labelText: '分類'),
@@ -223,14 +206,12 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _isSaving ? null : _saveMemory,
+              onPressed: _saveMemory,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: _isSaving
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('儲存回憶', style: TextStyle(color: Colors.white)),
+              child: const Text('儲存回憶', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
