@@ -11,8 +11,8 @@ class Memory {
   final String title;
   final String description;
   final DateTime date;
-  final List<String> imagePaths; // 這裡會變成 Cloudinary 的網址
-  final String audioPath;
+  final List<String> imagePaths;
+  final String audioPath; // 暫時不處理音檔
   final String category;
 
   Memory({
@@ -37,7 +37,7 @@ class Memory {
       description: data['description'] ?? '',
       date: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       imagePaths: imagePaths,
-      audioPath: data['audioPath'] ?? '',
+      audioPath: '', // 暫時忽略
       category: data['category'] ?? '',
     );
   }
@@ -59,27 +59,43 @@ class _MemoryPageState extends State<MemoryPage> {
   @override
   void initState() {
     super.initState();
-    _loadMemories();
+    _checkAndLoad(); // 加入這層封裝
+  }
+
+  void _checkAndLoad() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      debugPrint('尚未登入，略過 _loadMemories()');
+      return;
+    }
+
+    await _loadMemories();
   }
 
   Future<void> _loadMemories() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection('memories')
-        .where('uid', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
-        .get();
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('memories')
+          .where('uid', isEqualTo: uid)
+          .orderBy('createdAt', descending: true)
+          .get();
 
-    final memories = snapshot.docs
-        .map((doc) => Memory.fromFirestore(doc.data()))
-        .toList();
+      final memories = snapshot.docs
+          .map((doc) => Memory.fromFirestore(doc.data()))
+          .toList();
 
-    setState(() {
-      _memories.clear();
-      _memories.addAll(memories);
-    });
+      setState(() {
+        _memories.clear();
+        _memories.addAll(memories);
+      });
+    } catch (e) {
+      debugPrint('❌ 無法讀取資料：$e');
+      // 可視需求改成顯示 dialog 提示使用者建立索引
+    }
   }
 
   void _showCategoryManager() {
@@ -97,9 +113,106 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  void _showMemoryDetail(Memory memory) {
-    // 保留原彈窗邏輯
+  void _showFullScreenImage(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        insetPadding: EdgeInsets.zero,
+        backgroundColor: Colors.black,
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: InteractiveViewer(
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+    );
   }
+
+  void _showMemoryDetail(Memory memory) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return FractionallySizedBox(
+          heightFactor: 0.9,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                // 標題
+                Text(
+                  memory.title,
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 8),
+
+                // 描述
+                if (memory.description.isNotEmpty)
+                  Text(
+                    memory.description,
+                    style: TextStyle(fontSize: 16, color: Colors.grey[800]),
+                  ),
+
+                SizedBox(height: 16),
+
+                // 圖片列表（第一張為主圖，可點擊放大）
+                if (memory.imagePaths.isNotEmpty)
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        GestureDetector(
+                          onTap: () => _showFullScreenImage(memory.imagePaths.first),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              memory.imagePaths.first,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 12),
+                        ...memory.imagePaths.skip(1).map((url) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(url, fit: BoxFit.cover),
+                          ),
+                        )),
+                      ],
+                    ),
+                  ),
+
+                // 底部固定按鈕區
+                SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text('關閉'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   Future<void> _navigateToAddMemory() async {
     final result = await Navigator.push(
