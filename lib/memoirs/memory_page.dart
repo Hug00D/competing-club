@@ -3,14 +3,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'add_memory_page.dart';
-import 'edit_memory_page.dart';
 import 'category_manager.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class Memory {
   final String title;
   final String description;
   final DateTime date;
-  final List<String> imagePaths;
+  final List<String> imagePaths; // 這裡會變成 Cloudinary 的網址
   final String audioPath;
   final String category;
 
@@ -22,6 +23,24 @@ class Memory {
     required this.audioPath,
     required this.category,
   });
+
+  factory Memory.fromFirestore(Map<String, dynamic> data) {
+    final imageList = data['imageUrls'];
+    List<String> imagePaths = [];
+
+    if (imageList is List) {
+      imagePaths = imageList.whereType<String>().toList();
+    }
+
+    return Memory(
+      title: data['title'] ?? '',
+      description: data['description'] ?? '',
+      date: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      imagePaths: imagePaths,
+      audioPath: data['audioPath'] ?? '',
+      category: data['category'] ?? '',
+    );
+  }
 }
 
 class MemoryPage extends StatefulWidget {
@@ -36,6 +55,32 @@ class _MemoryPageState extends State<MemoryPage> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<String> _categories = ['人物', '旅遊'];
   final Set<String> _collapsedCategories = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMemories();
+  }
+
+  Future<void> _loadMemories() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('memories')
+        .where('uid', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    final memories = snapshot.docs
+        .map((doc) => Memory.fromFirestore(doc.data()))
+        .toList();
+
+    setState(() {
+      _memories.clear();
+      _memories.addAll(memories);
+    });
+  }
 
   void _showCategoryManager() {
     showModalBottomSheet(
@@ -94,128 +139,158 @@ class _MemoryPageState extends State<MemoryPage> {
           ),
         ],
       ),
-      body: _memories.isEmpty
-          ? const Center(child: Text('尚未新增任何回憶'))
-          : ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              children: _categories.map((category) {
-                final categoryMemories = _memories.where((m) => m.category == category).toList();
-                if (categoryMemories.isEmpty) return const SizedBox();
-                final isCollapsed = _collapsedCategories.contains(category);
+      body: FutureBuilder<QuerySnapshot>(
+        future: FirebaseFirestore.instance
+            .collection('memories')
+            .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+            .orderBy('createdAt', descending: true)
+            .get(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('尚未新增任何回憶'));
+          }
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          if (_collapsedCategories.contains(category)) {
-                            _collapsedCategories.remove(category);
-                          } else {
-                            _collapsedCategories.add(category);
-                          }
-                        });
-                      },
-                      child: Row(
-                        children: [
-                          Icon(isCollapsed ? Icons.expand_more : Icons.expand_less, color: const Color.fromARGB(221, 186, 155, 155)),
-                          const SizedBox(width: 4),
-                          Text(
-                            category,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color.fromARGB(221, 173, 150, 150)),
-                          ),
-                        ],
-                      ),
+          final allMemories = snapshot.data!.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return Memory(
+              title: data['title'] ?? '',
+              description: data['description'] ?? '',
+              date: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+              imagePaths: (data['imageUrls'] as List?)?.cast<String>() ?? [],
+              audioPath: data['audioPath'] ?? '',
+              category: data['category'] ?? '',
+            );
+          }).toList();
+
+          return ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            children: _categories.map((category) {
+              final categoryMemories = allMemories.where((m) => m.category == category).toList();
+              if (categoryMemories.isEmpty) return const SizedBox();
+              final isCollapsed = _collapsedCategories.contains(category);
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        if (_collapsedCategories.contains(category)) {
+                          _collapsedCategories.remove(category);
+                        } else {
+                          _collapsedCategories.add(category);
+                        }
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Icon(isCollapsed ? Icons.expand_more : Icons.expand_less,
+                            color: const Color.fromARGB(221, 186, 155, 155)),
+                        const SizedBox(width: 4),
+                        Text(
+                          category,
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color.fromARGB(221, 173, 150, 150)),
+                        ),
+                      ],
                     ),
-                    const Divider(thickness: 1, color: Colors.black45, height: 16),
-                    if (!isCollapsed)
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: categoryMemories.map((memory) {
-                          return GestureDetector(
-                            onTap: () => _showMemoryDetail(memory),
-                            child: Container(
-                              width: MediaQuery.of(context).size.width / 2 - 24,
-                              decoration: BoxDecoration(
-                                color: const Color.fromARGB(221, 131, 123, 123),
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color.fromARGB(66, 160, 143, 143),
-                                    blurRadius: 4,
-                                    offset: Offset(2, 2),
+                  ),
+                  const Divider(thickness: 1, color: Colors.black45, height: 16),
+                  if (!isCollapsed)
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: categoryMemories.map((memory) {
+                        return GestureDetector(
+                          onTap: () => _showMemoryDetail(memory),
+                          child: Container(
+                            width: MediaQuery.of(context).size.width / 2 - 24,
+                            decoration: BoxDecoration(
+                              color: const Color.fromARGB(221, 131, 123, 123),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color.fromARGB(66, 160, 143, 143),
+                                  blurRadius: 4,
+                                  offset: const Offset(2, 2),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                memory.imagePaths.isNotEmpty
+                                    ? ClipRRect(
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(12),
+                                    topRight: Radius.circular(12),
                                   ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  memory.imagePaths.isNotEmpty
-                                      ? ClipRRect(
-                                          borderRadius: const BorderRadius.only(
-                                            topLeft: Radius.circular(12),
-                                            topRight: Radius.circular(12),
-                                          ),
-                                          child: Image.file(
-                                            File(memory.imagePaths.first),
-                                            width: double.infinity,
-                                            height: 120,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
-                                              height: 120,
-                                              color: Colors.grey[400],
-                                            ),
-                                          ),
-                                        )
-                                      : Container(
-                                          height: 120,
-                                          width: double.infinity,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.grey,
-                                            borderRadius: BorderRadius.only(
-                                              topLeft: Radius.circular(12),
-                                              topRight: Radius.circular(12),
-                                            ),
-                                          ),
-                                        ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          memory.title,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                            color: Colors.white,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          memory.date.toString().substring(0, 16),
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ],
+                                  child: Image.network(
+                                    memory.imagePaths.first,
+                                    width: double.infinity,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 120,
+                                      color: Colors.grey[400],
                                     ),
                                   ),
-                                ],
-                              ),
+                                )
+                                    : Container(
+                                  height: 120,
+                                  width: double.infinity,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.grey,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(12),
+                                      topRight: Radius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        memory.title,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: Colors.white,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        memory.date.toString().substring(0, 16),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          );
-                        }).toList(),
-                      ),
-                    const SizedBox(height: 24),
-                  ],
-                );
-              }).toList(),
-            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  const SizedBox(height: 24),
+                ],
+              );
+            }).toList(),
+          );
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToAddMemory,
         backgroundColor: Colors.deepPurple,
