@@ -77,6 +77,15 @@ class MainMenuPage extends StatelessWidget {
                 Navigator.pushNamed(context, '/profile');
               },
             ),
+            _buildMenuCard(
+              context,
+              icon: Icons.chat_bubble_outline_rounded,
+              label: 'AI陪伴',
+              color: Colors.grey,
+              onTap: () {
+                Navigator.pushNamed(context, '/ai');
+              },
+            ),
           ],
         ),
       ),
