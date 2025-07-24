@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:memory/memoirs/memory_service.dart';
 
 class AICompanionPage extends StatefulWidget {
   const AICompanionPage({super.key});
@@ -105,12 +106,29 @@ class _AICompanionPageState extends State<AICompanionPage> {
     const url =
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey';
 
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    String memorySummary = '（尚無回憶紀錄）';
+    if (uid != null) {
+      final memoryService = MemoryService();
+      final memories = await memoryService.fetchMemories(uid);
+      memorySummary = memoryService.summarizeMemories(memories);
+    }
+
     final body = jsonEncode({
       'contents': [
         {
           'parts': [
             {
-              'text': '你是一位溫柔、耐心、親切的 AI 陪伴助理，請用鼓勵與溫暖的語氣回應使用者。\n\n使用者說：「$prompt」'
+              'text': '''
+  你是一位溫柔且簡潔的 AI 陪伴者，幫助使用者回憶過去的重要記憶。請根據使用者最近的回憶紀錄，協助他們找回具體的人事物。
+
+  語氣要溫暖、簡潔，不要太多冗詞或主觀推論。避免像「你一定很幸福」這類假設。請多給予實際記憶提示，例如：「你提過和兒子一起去台中」、「要不要聽聽那段錄音？」
+
+  使用者的部分回憶紀錄摘要如下：
+  $memorySummary
+
+  使用者說：「$prompt」
+  '''
             }
           ]
         }
@@ -131,6 +149,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
       return null;
     }
   }
+
+
 
   Future<void> _speak(String text) async {
     await _flutterTts.setPitch(1.2);
