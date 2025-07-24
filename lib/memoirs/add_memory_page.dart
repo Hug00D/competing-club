@@ -99,6 +99,18 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
       }
     }
 
+    String? uploadedAudioUrl;
+    if (_recordedPath != null) {
+      final audioFile = File(_recordedPath!);
+      debugPrint('正在上傳音檔: $_recordedPath');
+      uploadedAudioUrl = await uploadFileToCloudinary(audioFile, isImage: false);
+      if (uploadedAudioUrl != null) {
+        debugPrint('音檔上傳成功: $uploadedAudioUrl');
+      } else {
+        debugPrint('音檔上傳失敗，將使用空字串');
+      }
+    }
+
     debugPrint('即將寫入 Firestore');
 
     await FirebaseFirestore.instance.collection('memories').add({
@@ -107,7 +119,7 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
       'description': _descriptionController.text.trim(),
       'category': _selectedCategory,
       'imageUrls': uploadedImageUrls,
-      'audioPath': _recordedPath,
+      'audioPath': uploadedAudioUrl,
       'createdAt': FieldValue.serverTimestamp(),
     });
 

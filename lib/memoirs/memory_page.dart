@@ -1,4 +1,3 @@
-// memory_page.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
@@ -89,7 +88,7 @@ class _MemoryPageState extends State<MemoryPage> {
           .get();
 
       final memories = snapshot.docs
-          .map((doc) => Memory.fromFirestore(doc.id, doc.data() as Map<String, dynamic>))
+          .map((doc) => Memory.fromFirestore(doc.id, doc.data()))
           .toList();
 
       setState(() {
@@ -117,26 +116,7 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  void _showFullScreenImage(String imageUrl) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        insetPadding: EdgeInsets.zero,
-        backgroundColor: Colors.black,
-        child: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: InteractiveViewer(
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-   void _showMemoryDetail(Memory memory) {
+  void _showMemoryDetail(Memory memory) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -171,19 +151,19 @@ class _MemoryPageState extends State<MemoryPage> {
                               ),
                               child: memory.imagePaths.isNotEmpty
                                   ? Image.network(
-                                    memory.imagePaths.first,
-                                    fit: BoxFit.contain,
-                                    width: double.infinity,
-                                    errorBuilder: (_, __, ___) => Container(
-                                      height: 200,
-                                      color: Colors.grey[300],
-                                    ),
-                                  )
+                                memory.imagePaths.first,
+                                fit: BoxFit.contain,
+                                width: double.infinity,
+                                errorBuilder: (_, __, ___) => Container(
+                                  height: 200,
+                                  color: Colors.grey[300],
+                                ),
+                              )
                                   : Container(
-                                      height: 200,
-                                      width: double.infinity,
-                                      color: Colors.grey[300],
-                                    ),
+                                height: 200,
+                                width: double.infinity,
+                                color: Colors.grey[300],
+                              ),
                             ),
                             Positioned(
                               bottom: 20,
@@ -207,34 +187,7 @@ class _MemoryPageState extends State<MemoryPage> {
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.black.withOpacity(0.7),
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(30),
-                                      ),
-                                    ),
-                                    icon: const Icon(Icons.play_arrow, color: Colors.white),
-                                    label: const Text('播放語音', style: TextStyle(color: Colors.white)),
-                                    onPressed: () async {
-                                      final player = AudioPlayer();
 
-                                      try {
-                                        if (memory.audioPath.startsWith('http')) {
-                                          await player.setUrl(memory.audioPath); // 遠端播放
-                                        } else {
-                                          await player.setFilePath(memory.audioPath); // 本地播放
-                                        }
-                                        await player.play();
-                                      } catch (e) {
-                                        debugPrint('播放失敗: $e');
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('無法播放語音')),
-                                        );
-                                      }
-                                    },
-                                  ),
                                 ],
                               ),
                             ),
@@ -267,20 +220,46 @@ class _MemoryPageState extends State<MemoryPage> {
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                path,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
-                                  height: 150,
-                                  color: Colors.grey[300],
-                                ),
-                              )
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  path,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    height: 150,
+                                    color: Colors.grey[300],
+                                  ),
+                                )
                             ),
                           );
-                        }).toList(),
+                        }),
                         const SizedBox(height: 100),
                       ],
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 60,
+                    right: 20,
+                    child: FloatingActionButton(
+                      backgroundColor: Colors.white.withAlpha(179),
+                      child: const Icon(Icons.play_arrow, color: Colors.black, size: 30,),
+                      onPressed: () async {
+                        final ctx = context;
+                        final player = AudioPlayer();
+
+                        try {
+                          if (memory.audioPath.startsWith('http')) {
+                            await player.setUrl(memory.audioPath);
+                          } else {
+                            await player.setFilePath(memory.audioPath);
+                          }
+                          await player.play();
+                        } catch (e) {
+                          debugPrint('播放失敗: $e');
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('無法播放語音')),
+                          );
+                        }
+                      },
                     ),
                   ),
                   Positioned(
@@ -293,14 +272,14 @@ class _MemoryPageState extends State<MemoryPage> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => EditMemoryPage(
-                            docId: memory.id, // ← 你需要確保記憶物件有這個欄位
-                            title: memory.title,
-                            description: memory.description,
-                            imagePaths: memory.imagePaths,
-                            audioPath: memory.audioPath,
-                            category: memory.category,
-                            categories: _categories,
-                          ),
+                              docId: memory.id, // ← 你需要確保記憶物件有這個欄位
+                              title: memory.title,
+                              description: memory.description,
+                              imagePaths: memory.imagePaths,
+                              audioPath: memory.audioPath,
+                              category: memory.category,
+                              categories: _categories,
+                            ),
                           ),
                         );
                         if (result != null) {
@@ -356,14 +335,14 @@ class _MemoryPageState extends State<MemoryPage> {
       setState(() {
         _memories.add(
           Memory(
-          id: '', // or 'local-temp-id'
-          title: title,
-          description: description,
-          date: DateTime.now(),
-          imagePaths: images.map((f) => f.path).toList(),
-          audioPath: audioPath,
-          category: category,
-        ),
+            id: '', // or 'local-temp-id'
+            title: title,
+            description: description,
+            date: DateTime.now(),
+            imagePaths: images.map((f) => f.path).toList(),
+            audioPath: audioPath,
+            category: category,
+          ),
         );
       });
     }
