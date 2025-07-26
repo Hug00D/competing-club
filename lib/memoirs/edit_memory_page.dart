@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'memory_platform.dart';
 import 'cloudinary_upload.dart';
 
+
 class EditMemoryPage extends StatefulWidget {
   final String docId;
   final String title;
@@ -236,6 +237,49 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
               child: _isSaving
                   ? const CircularProgressIndicator(color: Colors.white)
                   : const Text('儲存回憶', style: TextStyle(color: Colors.white)),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('刪除回憶'),
+                    content: const Text('確定要刪除這則回憶嗎？刪除後無法恢復。'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('取消'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('刪除', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  await FirebaseFirestore.instance
+                      .collection('memories')
+                      .doc(widget.docId)
+                      .delete();
+
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('回憶已刪除')),
+                  );
+                  Navigator.pop(context, true); // 返回上一頁並刷新
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black, // ✅ 黑色背景
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text(
+                '刪除回憶',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold), // ✅ 紅字
+              ),
             ),
           ],
         ),
