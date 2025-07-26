@@ -47,7 +47,8 @@ class Memory {
 
 
 class MemoryPage extends StatefulWidget {
-  const MemoryPage({super.key});
+  final String? targetUid;
+  const MemoryPage({super.key, this.targetUid});
 
   @override
   State<MemoryPage> createState() => _MemoryPageState();
@@ -58,18 +59,18 @@ class _MemoryPageState extends State<MemoryPage> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<String> _categories = ['人物', '旅遊'];
   final Set<String> _collapsedCategories = {};
+  String? _uid;
 
   @override
   void initState() {
     super.initState();
+    _uid = widget.targetUid ?? FirebaseAuth.instance.currentUser?.uid;
     _checkAndLoad(); // 加入這層封裝
   }
 
   void _checkAndLoad() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      debugPrint('尚未登入，略過 _loadMemories()');
+    if (_uid == null) {
+      debugPrint('❌ 沒有 targetUid，也沒有登入者 uid，無法載入回憶錄');
       return;
     }
 
@@ -77,29 +78,29 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _loadMemories() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('memories')
-          .where('uid', isEqualTo: uid)
+          .where('uid', isEqualTo: _uid)
           .orderBy('createdAt', descending: true)
           .get();
+
+      debugPrint('📦 找到 ${snapshot.docs.length} 筆回憶錄 for uid=$_uid');
 
       final memories = snapshot.docs
           .map((doc) => Memory.fromFirestore(doc.id, doc.data()))
           .toList();
 
       setState(() {
-        _memories.clear();
-        _memories.addAll(memories);
+        _memories
+          ..clear()
+          ..addAll(memories);
       });
     } catch (e) {
       debugPrint('❌ 無法讀取資料：$e');
-      // 可視需求改成顯示 dialog 提示使用者建立索引
     }
   }
+
 
   void _showCategoryManager() {
     showModalBottomSheet(
@@ -237,11 +238,11 @@ class _MemoryPageState extends State<MemoryPage> {
                     ),
                   ),
                   Positioned(
-                    bottom: 60,
+                    bottom: 80,
                     right: 20,
                     child: FloatingActionButton(
-                      backgroundColor: Colors.white.withAlpha(179),
-                      child: const Icon(Icons.play_arrow, color: Colors.black, size: 30,),
+                      backgroundColor: const Color.fromARGB(255, 98, 97, 97),
+                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 32), // ✅ 加回箭頭
                       onPressed: () async {
                         final ctx = context;
                         final player = AudioPlayer();
@@ -363,7 +364,7 @@ class _MemoryPageState extends State<MemoryPage> {
       body: FutureBuilder<QuerySnapshot>(
         future: FirebaseFirestore.instance
             .collection('memories')
-            .where('uid', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+            .where('uid', isEqualTo: _uid)
             .orderBy('createdAt', descending: true)
             .get(),
         builder: (context, snapshot) {
