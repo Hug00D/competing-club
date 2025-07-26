@@ -4,7 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:intl/intl.dart'; // ✅ DateFormat
+import 'package:just_audio/just_audio.dart'; // ✅ 播放回憶錄語音
 import 'package:memory/memoirs/memory_service.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class AICompanionPage extends StatefulWidget {
   const AICompanionPage({super.key});
@@ -17,6 +20,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
   final TextEditingController _controller = TextEditingController();
   final FlutterTts _flutterTts = FlutterTts();
   final ScrollController _scrollController = ScrollController();
+  final AudioPlayer _audioPlayer = AudioPlayer(); // ✅ 加入音頻播放器
 
   final List<Map<String, String>> _messages = [];
   bool _isLoading = false;
@@ -27,6 +31,13 @@ class _AICompanionPageState extends State<AICompanionPage> {
     _loadPreviousMessages();
   }
 
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  // ✅ Firestore 讀取舊聊天紀錄
   Future<void> _loadPreviousMessages() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -60,6 +71,31 @@ class _AICompanionPageState extends State<AICompanionPage> {
     }
   }
 
+  // ✅ 讀取今日任務
+  Future<List<Map<String, String>>> _fetchTodayTasks() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return [];
+
+    final todayKey = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('tasks')
+        .where('date', isEqualTo: todayKey)
+        .get();
+
+    return snapshot.docs.map((doc) {
+      final data = doc.data();
+      return {
+        'task': (data['task'] ?? '').toString(),
+        'time': (data['time'] ?? '').toString(),
+        'end': (data['end'] ?? '').toString(),
+        'type': (data['type'] ?? '').toString(),
+      };
+    }).toList();
+  }
+
+  // ✅ 傳送訊息 & 處理回應
   Future<void> _sendMessage() async {
     final input = _controller.text.trim();
     if (input.isEmpty || input.length > 100) {
@@ -82,7 +118,17 @@ class _AICompanionPageState extends State<AICompanionPage> {
       setState(() {
         _messages.add({'role': 'ai', 'text': response});
       });
+
+      // ✅ 播放回憶語音（如果有）
+      await _maybePlayMemoryAudio(input);
+
+      // ✅ 提醒任務（如果有 1 小時內的任務）
+      await _checkUpcomingTasks();
+
+      // ✅ AI 朗讀
       await _speak(response);
+
+      // ✅ 存 Firestore
       await _saveToFirestore(input, response);
     }
 
@@ -90,6 +136,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
     _scrollToBottom();
   }
 
+  // ✅ 自動滾到最新訊息
   Future<void> _scrollToBottom() async {
     await Future.delayed(const Duration(milliseconds: 100));
     if (_scrollController.hasClients) {
@@ -101,8 +148,9 @@ class _AICompanionPageState extends State<AICompanionPage> {
     }
   }
 
+  // ✅ 呼叫 Gemini API
   Future<String?> _callGeminiAPI(String prompt) async {
-    const apiKey = 'AIzaSyCSiUQBqYBaWgpxHr37RcuKoaiiUOUfQhs';
+    const apiKey = 'YOUR_API_KEY';
     const url =
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey';
 
@@ -120,15 +168,18 @@ class _AICompanionPageState extends State<AICompanionPage> {
           'parts': [
             {
               'text': '''
-  你是一位溫柔且簡潔的 AI 陪伴者，幫助使用者回憶過去的重要記憶。請根據使用者最近的回憶紀錄，協助他們找回具體的人事物。
+你是一位溫柔且簡潔的 AI 陪伴者，幫助使用者回憶過去的重要記憶。
 
-  語氣要溫暖、簡潔，不要太多冗詞或主觀推論。避免像「你一定很幸福」這類假設。請多給予實際記憶提示，例如：「你提過和兒子一起去台中」、「要不要聽聽那段錄音？」
+⚠️ 規則：
+1. 用語簡單、溫暖，不要冗詞或假設「你一定很幸福」。
+2. 如果能找到對應回憶，請說「要不要聽聽那段錄音？」。
+3. 如果提到時間/藥，請提醒相關任務。
 
-  使用者的部分回憶紀錄摘要如下：
-  $memorySummary
+回憶紀錄摘要：
+$memorySummary
 
-  使用者說：「$prompt」
-  '''
+使用者說：「$prompt」
+'''
             }
           ]
         }
@@ -150,8 +201,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
     }
   }
 
-
-
+  // ✅ 語音播放（TTS）
   Future<void> _speak(String text) async {
     await _flutterTts.setPitch(1.2);
     await _flutterTts.setSpeechRate(0.45);
@@ -160,6 +210,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
     await _flutterTts.speak(text);
   }
 
+  // ✅ 存聊天紀錄到 Firestore
   Future<void> _saveToFirestore(String userText, String aiResponse) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -172,6 +223,72 @@ class _AICompanionPageState extends State<AICompanionPage> {
     });
   }
 
+  Future<void> _maybePlayMemoryAudio(String userInput) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+
+  final memoryService = MemoryService();
+  final memories = await memoryService.fetchMemories(uid);
+
+  final keywords = userInput.split(RegExp(r'\s+'));
+  final match = memories.firstWhere(
+    (m) => keywords.any((kw) =>
+        (m['title'] ?? '').toString().contains(kw) ||
+        (m['description'] ?? '').toString().contains(kw)),
+    orElse: () => {},
+  );
+
+  final audioUrl = match['audioPath'];
+  debugPrint('🎧 Firestore audioPath: $audioUrl');
+
+  if (audioUrl == null || audioUrl.isEmpty) {
+    debugPrint('⚠️ 沒有找到回憶語音');
+    return;
+  }
+
+  try {
+    await _flutterTts.stop(); // 停止 TTS
+    await _audioPlayer.stop(); // 停止任何正在播的音檔
+
+    if (audioUrl.startsWith('http')) {
+      debugPrint('▶️ 播放 HTTP 音訊: $audioUrl');
+      await _audioPlayer.setUrl(audioUrl);
+    } else if (audioUrl.startsWith('gs://')) {
+      final ref = FirebaseStorage.instance.refFromURL(audioUrl);
+      final downloadUrl = await ref.getDownloadURL();
+      await _audioPlayer.setUrl(downloadUrl);
+    } else {
+      debugPrint('▶️ 播放本地音檔: $audioUrl');
+      await _audioPlayer.setFilePath(audioUrl);
+    }
+
+    await _audioPlayer.play();
+    debugPrint('✅ 播放開始');
+  } catch (e) {
+    debugPrint('❌ 回憶語音播放失敗: $e');
+  }
+}
+
+
+  // ✅ 檢查 1 小時內的任務並提醒
+  Future<void> _checkUpcomingTasks() async {
+    final tasks = await _fetchTodayTasks();
+    final now = DateTime.now();
+
+    for (final task in tasks) {
+      final taskTime = DateFormat('HH:mm').parse(task['time']!);
+      final taskDateTime =
+          DateTime(now.year, now.month, now.day, taskTime.hour, taskTime.minute);
+
+      if (taskDateTime.isAfter(now) &&
+          taskDateTime.difference(now).inMinutes <= 60) {
+        await _flutterTts.speak("提醒您，一個小時後有任務：${task['task']}");
+        break;
+      }
+    }
+  }
+
+  // ✅ UI
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,7 +305,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
                 final isUser = msg['role'] == 'user';
                 return Align(
                   alignment:
-                  isUser ? Alignment.centerRight : Alignment.centerLeft,
+                      isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     padding: const EdgeInsets.all(12),
@@ -196,7 +313,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
                       color: isUser ? Colors.blue[100] : Colors.grey[300],
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(msg['text'] ?? '', style: TextStyle(color: Colors.black),),
+                    child: Text(msg['text'] ?? '',
+                        style: const TextStyle(color: Colors.black)),
                   ),
                 );
               },
