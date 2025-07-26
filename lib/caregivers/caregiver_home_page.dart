@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:memory/memoirs/memory_page.dart';
 import '../pages/user_task_page.dart';
 import 'task_statistics_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -84,7 +85,25 @@ class CaregiverHomePage extends StatelessWidget {
               label: '查看回憶錄',
               color: Colors.deepPurple,
               onTap: () {
-                // TODO: 跳轉至回憶錄頁面
+                final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
+                final caregiverName = '照顧者'; // 或使用 Firebase 資料裡的名稱
+                debugPrint('✅ data: $data');
+                debugPrint('✅ data uid: ${data['uid']}');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MemoryPage(
+                      targetUid: data['uid'], // 被照顧者 UID
+                    ),
+                    settings: RouteSettings(
+                      arguments: {
+                        'fromCaregiver': true,
+                        'caregiverUid': caregiverUid,
+                        'caregiverName': caregiverName,
+                      },
+                    ),
+                  ),
+                );
               },
             ),
             _buildMenuCard(
