@@ -124,6 +124,7 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           TextField(
                             controller: _accountController,
+                            style: TextStyle(color: Colors.black),
                             decoration: InputDecoration(
                               labelText: '帳號',
                               prefixIcon: const Icon(Icons.person_outline),
@@ -139,6 +140,7 @@ class _LoginPageState extends State<LoginPage> {
                           TextField(
                             controller: _passwordController,
                             obscureText: true,
+                            style: TextStyle(color: Colors.black),
                             decoration: InputDecoration(
                               labelText: '密碼',
                               prefixIcon: const Icon(Icons.lock_outline),
