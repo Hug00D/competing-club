@@ -15,6 +15,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String _role = '';
   String? _uid;
   bool _isLoading = true;
+  String? _identityCode; // 新增欄位
 
   @override
   void initState() {
@@ -22,15 +23,14 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadProfile();
   }
 
-  String? _identityCode; // 新增欄位
-
   Future<void> _loadProfile() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     _uid = user.uid;
 
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(_uid).get();
+      final doc =
+      await FirebaseFirestore.instance.collection('users').doc(_uid).get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         setState(() {
@@ -64,6 +64,13 @@ class _ProfilePageState extends State<ProfilePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('✅ 資料已儲存')),
       );
+    }
+  }
+
+  Future<void> _logout() async {
+    await FirebaseAuth.instance.signOut();
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/'); // 登出後導回登入頁
     }
   }
 
@@ -106,7 +113,8 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('唯一識別碼（長按可複製）', style: TextStyle(fontSize: 14, color: Colors.grey)),
+            const Text('唯一識別碼（長按可複製）',
+                style: TextStyle(fontSize: 14, color: Colors.grey)),
             const SizedBox(height: 4),
             Text(
               _identityCode!,
@@ -117,7 +125,6 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +147,8 @@ class _ProfilePageState extends State<ProfilePage> {
             CircleAvatar(
               radius: 48,
               backgroundColor: Colors.grey.shade300,
-              backgroundImage: const AssetImage('assets/images/default_avatar.png'),
+              backgroundImage:
+              const AssetImage('assets/images/default_avatar.png'),
             ),
             const SizedBox(height: 24),
             TextField(
@@ -155,6 +163,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildRoleDropdown(),
             _buildIdentityCodeField(),
             const SizedBox(height: 32),
+
+            // ✅ 儲存按鈕
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -167,7 +177,28 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text('儲存變更', style: TextStyle(fontSize: 16)),
+                child:
+                const Text('儲存變更', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // 🔴 **新增的登出按鈕**
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _logout,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.logout),
+                label: const Text('登出', style: TextStyle(fontSize: 16)),
               ),
             ),
           ],
