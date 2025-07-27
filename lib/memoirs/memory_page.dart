@@ -325,7 +325,7 @@ class _MemoryPageState extends State<MemoryPage> {
   Future<void> _navigateToAddMemory() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => AddMemoryPage(categories: _categories)),
+      MaterialPageRoute(builder: (context) => AddMemoryPage(categories: _categories, targetUid: _uid)),
     );
     if (result != null) {
       final title = result['title'] as String? ?? '';

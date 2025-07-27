@@ -10,8 +10,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AddMemoryPage extends StatefulWidget {
   final List<String> categories;
+  final String? targetUid;
 
-  const AddMemoryPage({super.key, required this.categories});
+  const AddMemoryPage({super.key, required this.categories, this.targetUid});
 
   @override
   State<AddMemoryPage> createState() => _AddMemoryPageState();
@@ -69,18 +70,22 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
 
     if (_titleController.text.trim().isEmpty) {
       debugPrint('標題為空，中止儲存');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('請輸入回憶標題')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('請輸入回憶標題')),
+        );
+      }
       return;
     }
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = widget.targetUid ?? FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       debugPrint('找不到登入使用者');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('尚未登入')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('尚未登入')),
+        );
+      }
       return;
     }
 
@@ -93,9 +98,9 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
       final url = await uploadFileToCloudinary(file, isImage: true);
       if (url != null) {
         uploadedImageUrls.add(url);
-        debugPrint('圖片上傳成功: $url');
+        debugPrint('✅ 圖片上傳成功: $url');
       } else {
-        debugPrint('圖片上傳失敗，跳過');
+        debugPrint('❌ 圖片上傳失敗，跳過');
       }
     }
 
@@ -105,34 +110,46 @@ class _AddMemoryPageState extends State<AddMemoryPage> {
       debugPrint('正在上傳音檔: $_recordedPath');
       uploadedAudioUrl = await uploadFileToCloudinary(audioFile, isImage: false);
       if (uploadedAudioUrl != null) {
-        debugPrint('音檔上傳成功: $uploadedAudioUrl');
+        debugPrint('✅ 音檔上傳成功: $uploadedAudioUrl');
       } else {
-        debugPrint('音檔上傳失敗，將使用空字串');
+        debugPrint('❌ 音檔上傳失敗，將使用空字串');
       }
     }
 
     debugPrint('即將寫入 Firestore');
 
-    await FirebaseFirestore.instance.collection('memories').add({
-      'uid': uid,
-      'title': _titleController.text.trim(),
-      'description': _descriptionController.text.trim(),
-      'category': _selectedCategory,
-      'imageUrls': uploadedImageUrls,
-      'audioPath': uploadedAudioUrl,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      await FirebaseFirestore.instance.collection('memories').add({
+        'uid': uid,
+        'title': _titleController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'category': _selectedCategory,
+        'imageUrls': uploadedImageUrls,
+        'audioPath': uploadedAudioUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
-    debugPrint('Firestore 寫入完成');
+      debugPrint('✅ Firestore 寫入完成');
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('回憶已儲存')),
-    );
-    Navigator.pop(context, true); // 回傳 true 讓上一頁可以重新整理
-
-    setState(() => _isSaving = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('回憶已儲存')),
+      );
+      Navigator.pop(context, true); // ✅ 回傳 true 讓上一頁 refresh
+    } catch (e) {
+      debugPrint('❌ Firestore 寫入失敗: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('儲存失敗，請稍後再試')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
+
 
   Widget _buildImageItem(String path) {
     return Stack(
