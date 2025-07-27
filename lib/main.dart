@@ -9,10 +9,10 @@ import 'pages/register_page.dart';
 import 'pages/profile_page.dart';
 import 'caregivers/bind_user_page.dart';
 import 'caregivers/select_user_page.dart';
+import 'caregivers/caregiver_profile_page.dart';
+import 'pages/ai_companion_page.dart';
 import 'firebase_options.dart'; // 用 FlutterFire CLI 產生
 import 'package:firebase_core/firebase_core.dart';
-
-
 
 
 void main() async {
@@ -43,6 +43,8 @@ class MemoryAssistantApp extends StatelessWidget {
         '/profile': (context) => const ProfilePage(),
         '/bindUser': (context) => const BindUserPage(),
         '/selectUser': (context) => const SelectUserPage(),
+        '/ai': (context) => const AICompanionPage(),
+        '/careProfile': (context) => CaregiverProfilePage(),
       },
     );
   }
