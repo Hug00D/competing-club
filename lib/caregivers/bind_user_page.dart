@@ -30,7 +30,11 @@ class _BindUserPageState extends State<BindUserPage> {
           .get();
 
     final data = doc.data();
-    if (data != null && data['boundUsers'] != null && (data['boundUsers'] as List).isNotEmpty) {
+    final boundUsers = (data?['boundUsers'] as List<dynamic>? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    if (boundUsers.isNotEmpty) {
       setState(() => _hasBoundUser = true);
     }
   }
@@ -43,6 +47,7 @@ class _BindUserPageState extends State<BindUserPage> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
+    // 1️⃣ 找被照顧者
     final snapshot = await FirebaseFirestore.instance
         .collection('users')
         .where('identityCode', isEqualTo: code)
@@ -57,17 +62,36 @@ class _BindUserPageState extends State<BindUserPage> {
       return;
     }
 
-    // 將此 user 的 uid 加入照顧者的 boundUsers 陣列
-    await FirebaseFirestore.instance
-        .collection('caregivers')
-        .doc(currentUser.uid)
-        .set({
-      'boundUsers': FieldValue.arrayUnion([snapshot.docs.first.id])
-    }, SetOptions(merge: true));
+    final targetUid = snapshot.docs.first.id;
+
+    // 2️⃣ 建立照顧者文件（如果不存在）
+    final caregiverRef =
+    FirebaseFirestore.instance.collection('caregivers').doc(currentUser.uid);
+
+    final caregiverDoc = await caregiverRef.get();
+    if (!caregiverDoc.exists) {
+      await caregiverRef.set({
+        'boundUsers': [],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // 3️⃣ 使用 Map 格式新增被照顧者
+    await caregiverRef.update({
+      'boundUsers': FieldValue.arrayUnion([
+        {
+          'uid': targetUid,
+          'nickname': '', // 預設空字串，之後可以改成「爺爺」「奶奶」
+        }
+      ])
+    });
+
+    setState(() => _isLoading = false);
 
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/selectUser');
   }
+
 
   @override
   Widget build(BuildContext context) {

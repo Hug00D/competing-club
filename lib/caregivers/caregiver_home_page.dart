@@ -123,6 +123,15 @@ class CaregiverHomePage extends StatelessWidget {
                 );
               },
             ),
+            _buildMenuCard(
+              context,
+              icon: Icons.person,
+              label: '個人檔案',
+              color: Colors.indigo,
+              onTap: () {
+                Navigator.pushReplacementNamed(context, '/careProfile');
+              },
+            ),
           ],
         ),
       ),

@@ -21,17 +21,23 @@ class _SelectUserPageState extends State<SelectUserPage> {
 
   Future<void> _loadLinkedUsers() async {
     try {
-      // 取得當前照顧者 UID
+      // 1️⃣ 取得當前照顧者 UID
       final caregiver = FirebaseAuth.instance.currentUser;
       if (caregiver == null) return;
+
+      // 2️⃣ 讀取 caregivers 文件
       final caregiverDoc = await FirebaseFirestore.instance
           .collection('caregivers')
           .doc(caregiver.uid)
           .get();
 
-      final boundUserUids = caregiverDoc.data()?['boundUsers'] as List<dynamic>? ?? [];
+      // 3️⃣ 轉換 boundUsers 為 List<Map>
+      final boundUsers = (caregiverDoc.data()?['boundUsers'] as List<dynamic>? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
 
-      if (boundUserUids.isEmpty) {
+      // 4️⃣ 如果沒有綁定任何被照顧者 → 清空 UI
+      if (boundUsers.isEmpty) {
         setState(() {
           _linkedUsers = [];
           _isLoading = false;
@@ -41,20 +47,28 @@ class _SelectUserPageState extends State<SelectUserPage> {
 
       final List<Map<String, dynamic>> users = [];
 
-      for (final uid in boundUserUids) {
+      // 5️⃣ 讀取每個被照顧者的詳細資料
+      for (final user in boundUsers) {
+        final uid = user['uid'] as String;
+        final nickname = user['nickname'] as String? ?? '';
+
         final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
         final data = userDoc.data();
+
         if (data != null) {
           users.add({
             'name': data['name'] ?? '未命名',
             'identityCode': data['identityCode'] ?? '',
             'uid': uid,
+            'nickname': nickname, // ✅ 保留 nickname，UI 可以直接顯示
           });
         }
       }
 
+      // 6️⃣ 更新 UI 狀態
+      if (!mounted) return;
       setState(() {
-        _linkedUsers = users;
+        _linkedUsers = users;  // ⚠️ _linkedUsers 要改成 List<Map<String, dynamic>>
         _isLoading = false;
       });
     } catch (e) {
@@ -66,6 +80,7 @@ class _SelectUserPageState extends State<SelectUserPage> {
       );
     }
   }
+
 
 
 
@@ -131,7 +146,9 @@ class _SelectUserPageState extends State<SelectUserPage> {
                 child: const Icon(Icons.person, color: Colors.teal),
               ),
               title: Text(
-                user['name'],
+                user['nickname'] != null && user['nickname'].toString().isNotEmpty
+                    ? '${user['name']}（${user['nickname']}）'
+                    : user['name'], // 沒暱稱就只顯示名字
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
