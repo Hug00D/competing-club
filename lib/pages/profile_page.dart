@@ -8,6 +8,11 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:flutter/foundation.dart';
+import 'package:crop_your_image/crop_your_image.dart';
+import 'package:path_provider/path_provider.dart';
+
+
+
 
 
 class ProfilePage extends StatefulWidget {
@@ -85,36 +90,75 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// ✅ 選擇圖片並上傳 Cloudinary
-  Future<void> _pickAndUploadAvatar() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
-    if (result == null) return;
+final CropController _cropController = CropController();
 
-    String fileName = result.files.first.name;
+Future<void> _pickAndUploadAvatar() async {
+  FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
+  if (result == null) return;
 
-    String? url;
+  // 直接讀 File
+  File file = File(result.files.first.path!);
+  Uint8List imageBytes = await file.readAsBytes();
 
-    if (kIsWeb) {
-      // 🌐 Web 用 bytes 上傳
-      Uint8List? fileBytes = result.files.first.bytes;
-      if (fileBytes != null) {
-        url = await uploadBytesToCloudinary(fileBytes, fileName);
-      }
-    } else {
-      // 📱 Mobile 用 File 上傳
-      File file = File(result.files.first.path!);
-      url = await uploadFileToCloudinary(file, isImage: true);
-    }
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return Dialog(
+        insetPadding: const EdgeInsets.all(12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          height: 500,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              const Text('裁剪頭像', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Crop(
+                  controller: _cropController,
+                  image: imageBytes, // ✅ 這裡直接用 Uint8List
+                  aspectRatio: 1,
+                  onCropped: (croppedData) async {
+                    Navigator.pop(context);
 
-    if (url != null) {
-      setState(() => _avatarUrl = url);
+                    // ✅ 存檔後再上傳
+                    final tempDir = await getTemporaryDirectory();
+                    final tempFile = File('${tempDir.path}/avatar.png');
+                    await tempFile.writeAsBytes(croppedData);
 
-      // ✅ 更新 Firestore avatarUrl
-      await FirebaseFirestore.instance.collection('users').doc(_uid).set({
-        'avatarUrl': url,
-      }, SetOptions(merge: true));
-    }
-  }
+                    String? url = await uploadFileToCloudinary(tempFile, isImage: true);
+
+                    if (url != null) {
+                      setState(() => _avatarUrl = url);
+                      await FirebaseFirestore.instance.collection('users').doc(_uid).set({
+                        'avatarUrl': url,
+                      }, SetOptions(merge: true));
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () => _cropController.crop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                child: const Text('完成裁剪'),
+              )
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+
+
+
+
 
 
   Future<String?> uploadBytesToCloudinary(Uint8List bytes, String fileName) async {
