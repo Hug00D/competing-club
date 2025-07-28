@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:flutter/foundation.dart';
+
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -88,19 +90,32 @@ class _ProfilePageState extends State<ProfilePage> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
     if (result == null) return;
 
-    Uint8List? fileBytes = result.files.first.bytes;
     String fileName = result.files.first.name;
 
-    // ✅ Web 用 bytes，上傳到 Cloudinary
-    final url = await uploadBytesToCloudinary(fileBytes!, fileName);
+    String? url;
+
+    if (kIsWeb) {
+      // 🌐 Web 用 bytes 上傳
+      Uint8List? fileBytes = result.files.first.bytes;
+      if (fileBytes != null) {
+        url = await uploadBytesToCloudinary(fileBytes, fileName);
+      }
+    } else {
+      // 📱 Mobile 用 File 上傳
+      File file = File(result.files.first.path!);
+      url = await uploadFileToCloudinary(file, isImage: true);
+    }
 
     if (url != null) {
       setState(() => _avatarUrl = url);
+
+      // ✅ 更新 Firestore avatarUrl
       await FirebaseFirestore.instance.collection('users').doc(_uid).set({
         'avatarUrl': url,
       }, SetOptions(merge: true));
     }
   }
+
 
   Future<String?> uploadBytesToCloudinary(Uint8List bytes, String fileName) async {
     const cloudName = 'dftre2xh6';
