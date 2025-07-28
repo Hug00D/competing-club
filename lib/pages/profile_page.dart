@@ -1,7 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart'; // 為了 Clipboard
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
+import 'package:http_parser/http_parser.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -14,8 +19,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _nameController = TextEditingController();
   String _role = '';
   String? _uid;
+  String? _identityCode;
+  String? _avatarUrl;
   bool _isLoading = true;
-  String? _identityCode; // 新增欄位
 
   @override
   void initState() {
@@ -23,20 +29,21 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadProfile();
   }
 
+  /// ✅ 從 Firestore 讀取個人資料
   Future<void> _loadProfile() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     _uid = user.uid;
 
     try {
-      final doc =
-      await FirebaseFirestore.instance.collection('users').doc(_uid).get();
+      final doc = await FirebaseFirestore.instance.collection('users').doc(_uid).get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         setState(() {
           _nameController.text = data['name'] ?? '';
           _role = data['role'] ?? '';
           _identityCode = data['identityCode'] ?? '';
+          _avatarUrl = data['avatarUrl']; // ✅ 可能為 null
           _isLoading = false;
         });
       } else {
@@ -46,12 +53,13 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('讀取個人資料失敗')),
+          const SnackBar(content: Text('❌ 讀取個人資料失敗')),
         );
       }
     }
   }
 
+  /// ✅ 儲存名稱 & 身分
   Future<void> _saveProfile() async {
     if (_uid == null) return;
 
@@ -67,6 +75,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// ✅ 登出功能
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     if (mounted) {
@@ -74,6 +83,79 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  /// ✅ 選擇圖片並上傳 Cloudinary
+  Future<void> _pickAndUploadAvatar() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result == null) return;
+
+    Uint8List? fileBytes = result.files.first.bytes;
+    String fileName = result.files.first.name;
+
+    // ✅ Web 用 bytes，上傳到 Cloudinary
+    final url = await uploadBytesToCloudinary(fileBytes!, fileName);
+
+    if (url != null) {
+      setState(() => _avatarUrl = url);
+      await FirebaseFirestore.instance.collection('users').doc(_uid).set({
+        'avatarUrl': url,
+      }, SetOptions(merge: true));
+    }
+  }
+
+  Future<String?> uploadBytesToCloudinary(Uint8List bytes, String fileName) async {
+    const cloudName = 'dftre2xh6';
+    const uploadPreset = 'memoirs';
+
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload'),
+    )
+      ..fields['upload_preset'] = uploadPreset
+      ..files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+
+    final response = await request.send();
+    final resBody = await response.stream.bytesToString();
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(resBody);
+      return data['secure_url'];
+    } else {
+      debugPrint('❌ Cloudinary 錯誤: $resBody');
+      return null;
+    }
+  }
+
+  /// ✅ 上傳檔案到 Cloudinary
+  Future<String?> uploadFileToCloudinary(File file, {required bool isImage}) async {
+    const cloudName = 'dftre2xh6';
+    const uploadPreset = 'memoirs';
+    final resourceType = isImage ? 'image' : 'video';
+
+    final uploadUrl = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/$resourceType/upload');
+
+    final mimeType = isImage ? 'image/jpeg' : 'audio/m4a';
+
+    final request = http.MultipartRequest('POST', uploadUrl)
+      ..fields['upload_preset'] = uploadPreset
+      ..files.add(await http.MultipartFile.fromPath(
+        'file',
+        file.path,
+        contentType: MediaType.parse(mimeType),
+      ));
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+
+    if (response.statusCode == 200) {
+      final data = json.decode(responseBody);
+      return data['secure_url'];
+    } else {
+      debugPrint('❌ Cloudinary 錯誤: $responseBody');
+      return null;
+    }
+  }
+
+  /// ✅ 下拉選單（照顧者/被照顧者）
   Widget _buildRoleDropdown() {
     return DropdownButtonFormField<String>(
       value: _role.isNotEmpty ? _role : null,
@@ -91,6 +173,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  /// ✅ 顯示唯一識別碼（可長按複製）
   Widget _buildIdentityCodeField() {
     return _identityCode == null || _identityCode!.isEmpty
         ? const SizedBox.shrink()
@@ -144,13 +227,40 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           children: [
             const SizedBox(height: 8),
+            /// ✅ 頭像（支援上傳）
             CircleAvatar(
-              radius: 48,
+              radius: 50,
               backgroundColor: Colors.grey.shade300,
-              backgroundImage:
-              const AssetImage('assets/images/default_avatar.png'),
+              backgroundImage: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                  ? NetworkImage(_avatarUrl!)
+                  : const AssetImage('assets/images/default_avatar.png')
+              as ImageProvider,
+              child: Align(
+                alignment: Alignment.bottomRight,
+                child: GestureDetector(
+                  onTap: _pickAndUploadAvatar,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(Icons.camera_alt, size: 20, color: Colors.black87),
+                  ),
+                ),
+              ),
             ),
+
             const SizedBox(height: 24),
+
+            /// ✅ 名稱輸入框
             TextField(
               controller: _nameController,
               style: const TextStyle(color: Colors.black),
@@ -159,12 +269,14 @@ class _ProfilePageState extends State<ProfilePage> {
                 border: OutlineInputBorder(),
               ),
             ),
+
             const SizedBox(height: 20),
             _buildRoleDropdown(),
             _buildIdentityCodeField(),
+
             const SizedBox(height: 32),
 
-            // ✅ 儲存按鈕
+            /// ✅ 儲存按鈕
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -177,14 +289,13 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child:
-                const Text('儲存變更', style: TextStyle(fontSize: 16)),
+                child: const Text('儲存變更', style: TextStyle(fontSize: 16)),
               ),
             ),
 
             const SizedBox(height: 16),
 
-            // 🔴 **新增的登出按鈕**
+            /// 🔴 登出按鈕
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(

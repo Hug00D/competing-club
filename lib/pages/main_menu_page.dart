@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../memoirs/memory_page.dart';
 import 'user_task_page.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class MainMenuPage extends StatelessWidget {
   final String userRole; // 由 Firebase 抓取傳入
@@ -16,30 +18,62 @@ class MainMenuPage extends StatelessWidget {
         centerTitle: true,
         backgroundColor: Colors.black54,
         actions: [
-          Row(
-            children: [
-              Text(
-                userRole,
-                style: const TextStyle(fontSize: 16, color: Colors.white),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () {
-                  Navigator.pushNamed(context, '/profile');
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 16),
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(FirebaseAuth.instance.currentUser?.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              // 🔄 讀取中
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.only(right: 16),
                   child: CircleAvatar(
-                    backgroundColor: Colors.transparent,
                     radius: 30,
-                    backgroundImage: const AssetImage('assets/images/default_avatar.png'),
+                    backgroundImage: AssetImage('assets/images/default_avatar.png'),
                   ),
-                ),
-              ),
-            ],
-          )
+                );
+              }
+
+              // 📦 拿到 Firestore 資料
+              final data = snapshot.data!.data() as Map<String, dynamic>?;
+
+              // 🔗 角色顯示
+              final name = data?['name'] ?? '';
+              final avatarUrl = data?['avatarUrl'];
+
+              return Row(
+                children: [
+                  // 🔵 角色名稱 (照顧者 / 被照顧者)
+                  Text(
+                    name ?? '被照顧者',
+                    style: const TextStyle(fontSize: 16, color: Colors.white),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // 🖼 頭像按鈕
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pushNamed(context, '/profile');
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Colors.transparent,
+                        backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+                            ? NetworkImage(avatarUrl) // ✅ Firestore 頭像
+                            : const AssetImage('assets/images/default_avatar.png') as ImageProvider,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
+
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: ListView(
