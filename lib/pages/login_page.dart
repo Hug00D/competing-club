@@ -124,13 +124,12 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           TextField(
                             controller: _accountController,
-                            style: const TextStyle(color: Colors.black87), // ✅ 文字顏色更深
+                            style: TextStyle(color: Colors.black),
                             decoration: InputDecoration(
                               labelText: '帳號',
-                              labelStyle: const TextStyle(color: Colors.black87), // ✅ Label 也加深
-                              prefixIcon: const Icon(Icons.person_outline, color: Colors.deepPurple),
+                              prefixIcon: const Icon(Icons.person_outline),
                               filled: true,
-                              fillColor: Colors.grey[300], // ✅ 原本的 100 → 300，背景更深
+                              fillColor: Colors.grey[100],
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide.none,
@@ -141,13 +140,12 @@ class _LoginPageState extends State<LoginPage> {
                           TextField(
                             controller: _passwordController,
                             obscureText: true,
-                            style: const TextStyle(color: Colors.black87), // ✅ 文字顏色更深
+                            style: TextStyle(color: Colors.black),
                             decoration: InputDecoration(
                               labelText: '密碼',
-                              labelStyle: const TextStyle(color: Colors.black87), // ✅ Label 也加深
-                              prefixIcon: const Icon(Icons.lock_outline, color: Colors.deepPurple),
+                              prefixIcon: const Icon(Icons.lock_outline),
                               filled: true,
-                              fillColor: Colors.grey[300], // ✅ 背景變深灰
+                              fillColor: Colors.grey[100],
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide.none,

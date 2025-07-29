@@ -1,6 +1,6 @@
 // 平台切換主檔，不能用 external！
 import 'memory_web.dart'
-  if (dart.library.io) 'memory_mobile.dart';
+if (dart.library.io) 'memory_mobile.dart';
 
 abstract class MemoryPlatform {
   Future<void> startRecording();

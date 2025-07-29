@@ -224,50 +224,50 @@ $memorySummary
   }
 
   Future<void> _maybePlayMemoryAudio(String userInput) async {
-  final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
-  final memoryService = MemoryService();
-  final memories = await memoryService.fetchMemories(uid);
+    final memoryService = MemoryService();
+    final memories = await memoryService.fetchMemories(uid);
 
-  final keywords = userInput.split(RegExp(r'\s+'));
-  final match = memories.firstWhere(
-    (m) => keywords.any((kw) =>
-        (m['title'] ?? '').toString().contains(kw) ||
-        (m['description'] ?? '').toString().contains(kw)),
-    orElse: () => {},
-  );
+    final keywords = userInput.split(RegExp(r'\s+'));
+    final match = memories.firstWhere(
+          (m) => keywords.any((kw) =>
+      (m['title'] ?? '').toString().contains(kw) ||
+          (m['description'] ?? '').toString().contains(kw)),
+      orElse: () => {},
+    );
 
-  final audioUrl = match['audioPath'];
-  debugPrint('🎧 Firestore audioPath: $audioUrl');
+    final audioUrl = match['audioPath'];
+    debugPrint('🎧 Firestore audioPath: $audioUrl');
 
-  if (audioUrl == null || audioUrl.isEmpty) {
-    debugPrint('⚠️ 沒有找到回憶語音');
-    return;
-  }
-
-  try {
-    await _flutterTts.stop(); // 停止 TTS
-    await _audioPlayer.stop(); // 停止任何正在播的音檔
-
-    if (audioUrl.startsWith('http')) {
-      debugPrint('▶️ 播放 HTTP 音訊: $audioUrl');
-      await _audioPlayer.setUrl(audioUrl);
-    } else if (audioUrl.startsWith('gs://')) {
-      final ref = FirebaseStorage.instance.refFromURL(audioUrl);
-      final downloadUrl = await ref.getDownloadURL();
-      await _audioPlayer.setUrl(downloadUrl);
-    } else {
-      debugPrint('▶️ 播放本地音檔: $audioUrl');
-      await _audioPlayer.setFilePath(audioUrl);
+    if (audioUrl == null || audioUrl.isEmpty) {
+      debugPrint('⚠️ 沒有找到回憶語音');
+      return;
     }
 
-    await _audioPlayer.play();
-    debugPrint('✅ 播放開始');
-  } catch (e) {
-    debugPrint('❌ 回憶語音播放失敗: $e');
+    try {
+      await _flutterTts.stop(); // 停止 TTS
+      await _audioPlayer.stop(); // 停止任何正在播的音檔
+
+      if (audioUrl.startsWith('http')) {
+        debugPrint('▶️ 播放 HTTP 音訊: $audioUrl');
+        await _audioPlayer.setUrl(audioUrl);
+      } else if (audioUrl.startsWith('gs://')) {
+        final ref = FirebaseStorage.instance.refFromURL(audioUrl);
+        final downloadUrl = await ref.getDownloadURL();
+        await _audioPlayer.setUrl(downloadUrl);
+      } else {
+        debugPrint('▶️ 播放本地音檔: $audioUrl');
+        await _audioPlayer.setFilePath(audioUrl);
+      }
+
+      await _audioPlayer.play();
+      debugPrint('✅ 播放開始');
+    } catch (e) {
+      debugPrint('❌ 回憶語音播放失敗: $e');
+    }
   }
-}
 
 
   // ✅ 檢查 1 小時內的任務並提醒
@@ -278,7 +278,7 @@ $memorySummary
     for (final task in tasks) {
       final taskTime = DateFormat('HH:mm').parse(task['time']!);
       final taskDateTime =
-          DateTime(now.year, now.month, now.day, taskTime.hour, taskTime.minute);
+      DateTime(now.year, now.month, now.day, taskTime.hour, taskTime.minute);
 
       if (taskDateTime.isAfter(now) &&
           taskDateTime.difference(now).inMinutes <= 60) {
@@ -305,7 +305,7 @@ $memorySummary
                 final isUser = msg['role'] == 'user';
                 return Align(
                   alignment:
-                      isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  isUser ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 6),
                     padding: const EdgeInsets.all(12),

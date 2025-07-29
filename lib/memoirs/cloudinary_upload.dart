@@ -30,7 +30,6 @@ Future<String?> uploadFileToCloudinary(File file, {required bool isImage}) async
     final data = json.decode(responseBody);
     return data['secure_url'];
   } else {
-    print('❌ 上傳失敗: ${response.statusCode} - $responseBody');
     return null;
   }
 }

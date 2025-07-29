@@ -244,7 +244,6 @@ class _MemoryPageState extends State<MemoryPage> {
                       backgroundColor: const Color.fromARGB(255, 98, 97, 97),
                       child: const Icon(Icons.play_arrow, color: Colors.white, size: 32), // ✅ 加回箭頭
                       onPressed: () async {
-                        final ctx = context;
                         final player = AudioPlayer();
 
                         try {
@@ -256,7 +255,8 @@ class _MemoryPageState extends State<MemoryPage> {
                           await player.play();
                         } catch (e) {
                           debugPrint('播放失敗: $e');
-                          ScaffoldMessenger.of(ctx).showSnackBar(
+                           // ✅ 確保 widget 還存在
+                          ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('無法播放語音')),
                           );
                         }
@@ -298,7 +298,7 @@ class _MemoryPageState extends State<MemoryPage> {
                               );
                             }
                           });
-                          Navigator.pop(context);
+                          if (context.mounted) Navigator.of(context).pop();
                         }
                       },
                       icon: const Icon(Icons.edit),

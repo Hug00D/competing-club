@@ -265,11 +265,12 @@ class _EditMemoryPageState extends State<EditMemoryPage> {
                       .doc(widget.docId)
                       .delete();
 
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('回憶已刪除')),
-                  );
-                  Navigator.pop(context, true); // 返回上一頁並刷新
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('回憶已刪除')),
+                    );
+                  }
+                  if (context.mounted) Navigator.of(context).pop(true); // 返回上一頁並刷新
                 }
               },
               style: ElevatedButton.styleFrom(
