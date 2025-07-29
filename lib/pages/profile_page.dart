@@ -12,9 +12,6 @@ import 'package:crop_your_image/crop_your_image.dart';
 import 'package:path_provider/path_provider.dart';
 
 
-
-
-
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -90,74 +87,103 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-final CropController _cropController = CropController();
+  /// ✅ 選擇圖片並上傳 Cloudinary
+  Future<void> _pickAndUploadAvatar() async {
+    // Step 1: 選擇圖片
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result == null) return;
 
-Future<void> _pickAndUploadAvatar() async {
-  FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
-  if (result == null) return;
+    Uint8List? imageBytes;
 
-  // 直接讀 File
-  File file = File(result.files.first.path!);
-  Uint8List imageBytes = await file.readAsBytes();
+    if (kIsWeb) {
+      imageBytes = result.files.first.bytes;
+    } else {
+      File file = File(result.files.first.path!);
+      imageBytes = await file.readAsBytes();
+    }
 
-  await showDialog(
-    context: context,
-    builder: (context) {
-      return Dialog(
-        insetPadding: const EdgeInsets.all(12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Container(
-          height: 500,
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              const Text('裁剪頭像', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Crop(
-                  controller: _cropController,
-                  image: imageBytes, // ✅ 這裡直接用 Uint8List
-                  aspectRatio: 1,
-                  onCropped: (croppedData) async {
-                    Navigator.pop(context);
+    // ✅ 防呆：確保一定有圖片
+    if (imageBytes == null) {
+      debugPrint('❌ 無法取得圖片 bytes');
+      return;
+    }
 
-                    // ✅ 存檔後再上傳
-                    final tempDir = await getTemporaryDirectory();
-                    final tempFile = File('${tempDir.path}/avatar.png');
-                    await tempFile.writeAsBytes(croppedData);
+    if (!mounted) return; // ✅ 避免 async gap 後使用 context 出錯
 
-                    String? url = await uploadFileToCloudinary(tempFile, isImage: true);
+    // Step 2: 打開裁切對話框
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {   // ✅ 避免 async gap 直接用 context
+        final cropController = CropController();
 
-                    if (url != null) {
-                      setState(() => _avatarUrl = url);
-                      await FirebaseFirestore.instance.collection('users').doc(_uid).set({
-                        'avatarUrl': url,
-                      }, SetOptions(merge: true));
-                    }
-                  },
+        return Dialog(
+          insetPadding: const EdgeInsets.all(12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Container(
+            height: 500,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                const Text('裁剪頭像', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Crop(
+                    controller: cropController,
+                    image: imageBytes!,   // ✅ 這裡已經保證是 Uint8List
+                    aspectRatio: 1,      // ✅ 正方形頭像
+                    onCropped: (result) async {
+                      Navigator.pop(dialogContext);
+
+                      if (result is CropSuccess) {
+                        // ✅ 拿到裁切後的圖片 bytes
+                        Uint8List croppedBytes = result.croppedImage;
+
+                        // Step 3: Mobile 用暫存檔
+                        File? tempFile;
+                        if (!kIsWeb) {
+                          final tempDir = await getTemporaryDirectory();
+                          tempFile = File('${tempDir.path}/avatar.png');
+                          await tempFile.writeAsBytes(croppedBytes);
+                        }
+
+                        // Step 4: 上傳到 Cloudinary
+                        String? url;
+                        if (kIsWeb) {
+                          url = await uploadBytesToCloudinary(croppedBytes, 'avatar.png');
+                        } else {
+                          url = await uploadFileToCloudinary(tempFile!, isImage: true);
+                        }
+
+                        // Step 5: Firestore 更新
+                        if (url != null && mounted) {
+                          setState(() => _avatarUrl = url);
+                          await FirebaseFirestore.instance.collection('users').doc(_uid).set({
+                            'avatarUrl': url,
+                          }, SetOptions(merge: true));
+                        }
+                      } else {
+                        debugPrint('❌ 裁剪失敗: $result');
+                      }
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: () => _cropController.crop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                child: const Text('完成裁剪'),
-              )
-            ],
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => cropController.crop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                  child: const Text('完成裁剪'),
+                )
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
-}
-
-
-
-
+        );
+      },
+    );
+  }
 
 
 
