@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'caregiver_session.dart';
 
 class SelectUserPage extends StatefulWidget {
   const SelectUserPage({super.key});
@@ -164,7 +165,13 @@ class _SelectUserPageState extends State<SelectUserPage> {
               ),
               trailing: const Icon(Icons.chevron_right_rounded,
                   size: 26, color: Colors.teal),
-              onTap: () => _selectUser(user),
+              onTap: () {
+                CaregiverSession.selectedCareReceiverUid = user['uid'];
+                CaregiverSession.selectedCareReceiverName = user['name'];
+                CaregiverSession.selectedCareReceiverIdentityCode = user['identityCode'];
+                debugPrint(CaregiverSession.selectedCareReceiverIdentityCode);
+                _selectUser(user);
+              },
             ),
           );
         },
