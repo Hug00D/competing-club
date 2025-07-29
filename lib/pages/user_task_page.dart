@@ -7,6 +7,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'monthly_overview_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:memory/caregivers/caregiver_session.dart';
 
 
 Future<void> uploadTasksToFirebase(Map<String, List<Map<String, String>>> taskMap, String uid) async {
@@ -482,6 +483,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
                     if (!context.mounted) return; // ✅ 確保 context 還活著
 
                     Navigator.pop(context);
+
                     if (fromCaregiver && caregiverUid != null) {
                       Navigator.pushNamedAndRemoveUntil(
                         context,
@@ -489,6 +491,9 @@ class _UserTaskPageState extends State<UserTaskPage> {
                             (route) => false,
                         arguments: {
                           'uid': caregiverUid,
+                          'selectedCareReceiverUid': CaregiverSession.selectedCareReceiverUid,
+                          'selectedCareReceiverName': CaregiverSession.selectedCareReceiverName,
+                          'selectedCareReceiverIdentityCode': CaregiverSession.selectedCareReceiverIdentityCode,
                         },
                       );
                     } else {
