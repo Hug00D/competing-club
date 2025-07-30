@@ -13,10 +13,11 @@ import 'caregivers/caregiver_profile_page.dart';
 import 'pages/ai_companion_page.dart';
 import 'firebase_options.dart'; // 用 FlutterFire CLI 產生
 import 'package:firebase_core/firebase_core.dart';
-
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.init();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );

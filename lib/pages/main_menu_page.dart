@@ -3,6 +3,7 @@ import '../memoirs/memory_page.dart';
 import 'user_task_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:memory/services/notification_service.dart';
 
 class MainMenuPage extends StatelessWidget {
   final String userRole; // 由 Firebase 抓取傳入
@@ -119,6 +120,17 @@ class MainMenuPage extends StatelessWidget {
               onTap: () {
                 Navigator.pushNamed(context, '/ai');
               },
+            ),
+            ElevatedButton(
+              onPressed: () {
+                NotificationService.scheduleNotification(
+                  id: 1,
+                  title: '吃藥提醒',
+                  body: '該吃藥囉！',
+                  scheduledTime: DateTime.now().add(const Duration(seconds: 10)),
+                );
+              },
+              child: const Text('10 秒後提醒'),
             ),
           ],
         ),
