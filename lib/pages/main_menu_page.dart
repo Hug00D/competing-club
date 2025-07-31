@@ -126,8 +126,10 @@ class MainMenuPage extends StatelessWidget {
                 NotificationService.scheduleNotification(
                   id: 1,
                   title: '吃藥提醒',
-                  body: '該吃藥囉！',
-                  scheduledTime: DateTime.now().add(const Duration(seconds: 10)),
+                  body: 'Sensei 該吃藥囉！',
+                  scheduledTime: DateTime.now().add(Duration(seconds: 60)),
+                  useExact: true,
+                  //useExact: true, // 🔥 開啟精準模式
                 );
               },
               child: const Text('10 秒後提醒'),
