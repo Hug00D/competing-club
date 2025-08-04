@@ -123,13 +123,20 @@ class MainMenuPage extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                NotificationService.scheduleNotification(
+                NotificationService.showTestNotification();
+                NotificationService.scheduleExactNotification(
                   id: 1,
                   title: '吃藥提醒',
                   body: 'Sensei 該吃藥囉！',
-                  scheduledTime: DateTime.now().add(Duration(seconds: 60)),
-                  useExact: true,
-                  //useExact: true, // 🔥 開啟精準模式
+                  scheduledTime: DateTime.now().add(Duration(seconds: 600)),
+                  //useExact: true,
+                );
+                NotificationService.scheduleAlarmClockNotification(
+                  id: 2,
+                  title: '吃藥提醒',
+                  body: 'Sensei 該吃藥囉！',
+                  scheduledTime: DateTime.now().add(Duration(seconds: 600)),
+                  //useExact: true,
                 );
               },
               child: const Text('10 秒後提醒'),
