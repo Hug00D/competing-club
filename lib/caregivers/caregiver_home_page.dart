@@ -160,6 +160,23 @@ class CaregiverHomePage extends StatelessWidget {
                 Navigator.pushReplacementNamed(context, '/careProfile');
               },
             ),
+            _buildMenuCard(
+              context,
+              icon: Icons.location_on,
+              label: '查看定位地圖',
+              color: Colors.green,
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  '/map',
+                  arguments: {
+                    'selectedCareReceiverUid': CaregiverSession.selectedCareReceiverUid,
+                    'selectedCareReceiverName': CaregiverSession.selectedCareReceiverName,
+                    'selectedCareReceiverIdentityCode': CaregiverSession.selectedCareReceiverIdentityCode,
+                  },
+                );
+              },
+            ),
           ],
         ),
       ),

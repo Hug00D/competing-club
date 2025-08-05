@@ -10,6 +10,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:flutter/foundation.dart';
 import 'package:crop_your_image/crop_your_image.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:memory/services/location_uploader.dart';
 
 
 class ProfilePage extends StatefulWidget {
@@ -26,6 +27,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _identityCode;
   String? _avatarUrl;
   bool _isLoading = true;
+  bool _locationEnabled = false;
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _ProfilePageState extends State<ProfilePage> {
           _role = data['role'] ?? '';
           _identityCode = data['identityCode'] ?? '';
           _avatarUrl = data['avatarUrl']; // ✅ 可能為 null
+          _locationEnabled = data['locationEnabled'] ?? false;
           _isLoading = false;
         });
       } else {
@@ -70,7 +73,14 @@ class _ProfilePageState extends State<ProfilePage> {
     await FirebaseFirestore.instance.collection('users').doc(_uid).set({
       'name': _nameController.text.trim(),
       'role': _role,
+      'locationEnabled': _locationEnabled, // ✅ 加這行
     }, SetOptions(merge: true));
+
+    if (_locationEnabled) {
+      LocationUploader().start();
+    } else {
+      LocationUploader().stop();
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -360,6 +370,16 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildIdentityCodeField(),
 
             const SizedBox(height: 32),
+            SwitchListTile(
+              value: _locationEnabled,
+              onChanged: (value) {
+                setState(() => _locationEnabled = value);
+              },
+              title: const Text('啟用位置上傳'),
+              subtitle: const Text('開啟後照顧者可查看您的即時位置'),
+              activeColor: themeColor,
+            ),
+            const SizedBox(height: 12),
 
             /// ✅ 儲存按鈕
             SizedBox(

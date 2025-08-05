@@ -91,6 +91,7 @@ class _MemoryPageState extends State<MemoryPage> {
           .map((doc) => Memory.fromFirestore(doc.id, doc.data()))
           .toList();
 
+      if (!mounted) return; // ✅ 這裡加上這行
       setState(() {
         _memories
           ..clear()
@@ -100,6 +101,7 @@ class _MemoryPageState extends State<MemoryPage> {
       debugPrint('❌ 無法讀取資料：$e');
     }
   }
+
 
 
   void _showCategoryManager() {

@@ -8,6 +8,7 @@ import 'monthly_overview_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:memory/caregivers/caregiver_session.dart';
+import 'package:memory/services/notification_service.dart';
 
 
 Future<void> uploadTasksToFirebase(Map<String, List<Map<String, String>>> taskMap, String uid) async {
@@ -323,6 +324,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
       String start = result['start'] ?? '';
       String end = result['end'] ?? '';
 
+      // ✅ 補齊開始/結束時間（只有一個時間時，自動補30分鐘）
       if (start.isEmpty && end.isNotEmpty) {
         final endTime = DateFormat("HH:mm").parse(end);
         start = DateFormat("HH:mm").format(endTime.subtract(const Duration(minutes: 30)));
@@ -333,15 +335,50 @@ class _UserTaskPageState extends State<UserTaskPage> {
 
       final dateKey = result['date'] ?? DateFormat('yyyy-MM-dd').format(selectedDate);
       final type = result['type'] ?? '提醒'; // 如果沒傳回 type，預設為「提醒」
+
+      // ✅ 把任務加進 taskMap
       setState(() {
         taskMap.putIfAbsent(dateKey, () => []);
-        taskMap[dateKey]!.add({'task': result['task']!, 'time': start, 'end': end, 'type': type, 'completed': 'false',});
+        taskMap[dateKey]!.add({
+          'task': result['task']!,
+          'time': start,
+          'end': end,
+          'type': type,
+          'completed': 'false',
+        });
         taskMap[dateKey]!.sort((a, b) => a['time']!.compareTo(b['time']!));
       });
 
+      // ✅ 上傳 Firebase
       await uploadTasksToFirebase(taskMap, uid);
+
+      // ✅ 這裡新增「通知排程」
+      try {
+        // 1️⃣ 解析通知時間（yyyy-MM-dd + HH:mm）
+        final DateTime scheduledTime =
+        DateFormat('yyyy-MM-dd HH:mm').parse('$dateKey $start');
+
+        // 2️⃣ 任務標題
+        final String taskTitle = result['task']!;
+
+        // 3️⃣ 用「日期 + 時間」算通知 ID，避免重複
+        final int notificationId = scheduledTime.hashCode;
+
+        // 4️⃣ 排程通知
+        await NotificationService.scheduleExactNotification(
+          id: notificationId,
+          title: '任務提醒',
+          body: '$taskTitle 的時間到了！',
+          scheduledTime: scheduledTime,
+        );
+
+        debugPrint('✅ 已為任務 [$taskTitle] 安排通知：$scheduledTime');
+      } catch (e) {
+        debugPrint('❌ 通知排程錯誤: $e');
+      }
     }
   }
+
   Future<void> _deleteTask(int index) async {
     final key = DateFormat('yyyy-MM-dd').format(selectedDate);
     final task = taskMap[key]![index];

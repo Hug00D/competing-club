@@ -150,7 +150,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
 
   // ✅ 呼叫 Gemini API
   Future<String?> _callGeminiAPI(String prompt) async {
-    const apiKey = 'YOUR_API_KEY';
+    const apiKey = 'AIzaSyCSiUQBqYBaWgpxHr37RcuKoaiiUOUfQhs';
     const url =
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey';
 
