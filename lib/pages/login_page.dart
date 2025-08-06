@@ -73,7 +73,7 @@ class _LoginPageState extends State<LoginPage> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFF3E8FF), Color(0xFFE9D5FF)], // 淺紫 → 更淺紫
+            colors: [Color(0xFFE3F2FD), Color(0xFFEBFDFD)], // 淺藍紫背景
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -84,15 +84,21 @@ class _LoginPageState extends State<LoginPage> {
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
-                  // 🟣 預留 Logo 位置
+                  // 🔵 LOGO 區塊
                   Container(
                     height: 100,
                     width: 100,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white,
+                      color: Colors.transparent,
                     ),
-                    child: const Icon(Icons.lock_outline, size: 60, color: Colors.deepPurple),
+                    child: Center(
+                      child: Image.asset(
+                        'assets/images/memory_icon.png',
+                        width: 100,
+                        height: 100,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 20),
 
@@ -101,7 +107,7 @@ class _LoginPageState extends State<LoginPage> {
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple,
+                      color: Color(0xFF5B8EFF), // Logo 主色
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -111,9 +117,9 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 30),
 
-                  // 🟣 登入卡片（淺色）
+                  // 🟣 登入卡片（白底＋輸入欄）
                   Card(
-                    color: Colors.white, // ✅ 讓底變成白色
+                    color: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
@@ -124,7 +130,7 @@ class _LoginPageState extends State<LoginPage> {
                         children: [
                           TextField(
                             controller: _accountController,
-                            style: TextStyle(color: Colors.black),
+                            style: const TextStyle(color: Colors.black),
                             decoration: InputDecoration(
                               labelText: '帳號',
                               prefixIcon: const Icon(Icons.person_outline),
@@ -140,7 +146,7 @@ class _LoginPageState extends State<LoginPage> {
                           TextField(
                             controller: _passwordController,
                             obscureText: true,
-                            style: TextStyle(color: Colors.black),
+                            style: const TextStyle(color: Colors.black),
                             decoration: InputDecoration(
                               labelText: '密碼',
                               prefixIcon: const Icon(Icons.lock_outline),
@@ -154,16 +160,23 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           const SizedBox(height: 25),
 
-                          // ✅ 登入按鈕（顏色和 Logo 一致）
+                          // ✅ 登入按鈕（Logo 漸層風格）
                           _isLoading
                               ? const CircularProgressIndicator()
-                              : SizedBox(
+                              : Container(
                             width: double.infinity,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF5B8EFF), Color(0xFF49E3D4)],
+                              ),
+                            ),
                             child: ElevatedButton(
                               onPressed: _login,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.deepPurple,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                backgroundColor: Colors.transparent,
+                                shadowColor: Colors.transparent,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -186,7 +199,7 @@ class _LoginPageState extends State<LoginPage> {
                             },
                             child: const Text(
                               '還沒有帳號？前往註冊',
-                              style: TextStyle(color: Colors.deepPurple),
+                              style: TextStyle(color: Color(0xFF5B8EFF)),
                             ),
                           ),
                         ],
