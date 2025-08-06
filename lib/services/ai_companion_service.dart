@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:memory/memoirs/memory_service.dart';
+import 'package:flutter/foundation.dart'; // 👈 加這行才有 debugPrint
 
 class AICompanionService {
   final FlutterTts _flutterTts = FlutterTts();
@@ -81,44 +82,126 @@ class AICompanionService {
     });
   }
 
-  /// 根據關鍵字播放回憶語音
-  Future<void> playMemoryAudioIfMatch(String userInput) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+Map<String, dynamic>? _lastPlayedMemory;
 
-    final memoryService = MemoryService();
-    final memories = await memoryService.fetchMemories(uid);
+Future<bool> playMemoryAudioIfMatch(String userInput) async {
+  debugPrint('🎧 呼叫 playMemoryAudioIfMatch');
 
-    final keywords = userInput.split(RegExp(r'\s+'));
-    final match = memories.firstWhere(
-      (m) => keywords.any((kw) =>
-          (m['title'] ?? '').toString().contains(kw) ||
-          (m['description'] ?? '').toString().contains(kw)),
-      orElse: () => {},
-    );
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return false;
 
-    final audioUrl = match['audioPath'];
-    if (audioUrl == null || audioUrl.isEmpty) return;
+  final memoryService = MemoryService();
+  final memories = await memoryService.fetchMemories(uid);
+  debugPrint('📦 撈到 ${memories.length} 筆記憶');
 
-    try {
-      await _flutterTts.stop();
-      await _audioPlayer.stop();
+  final lowerInput = userInput.toLowerCase();
+  final keywords = userInput.split(RegExp(r'\s+'));
+  debugPrint('🔍 關鍵字：$keywords');
 
-      if (audioUrl.startsWith('http')) {
-        await _audioPlayer.setUrl(audioUrl);
-      } else if (audioUrl.startsWith('gs://')) {
-        final ref = FirebaseStorage.instance.refFromURL(audioUrl);
-        final downloadUrl = await ref.getDownloadURL();
-        await _audioPlayer.setUrl(downloadUrl);
-      } else {
-        await _audioPlayer.setFilePath(audioUrl);
+  // ✅ 處理「再播一次」類型
+  if (lowerInput.contains("再播") || lowerInput.contains("重播") || lowerInput.contains("再聽")) {
+    if (_lastPlayedMemory != null) {
+      final audioUrl = _lastPlayedMemory!['audioPath'];
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        debugPrint('🔁 重播上次記憶：$audioUrl');
+        return await _playAudioFromPath(audioUrl);
       }
+    }
+    debugPrint('⚠️ 沒有可重播的記憶');
+    return false;
+  }
 
-      await _audioPlayer.play();
-    } catch (e) {
-      print('❌ 回憶語音播放失敗: $e');
+  // ✅ 從輸入找日期（例如 8/6）
+  final datePattern = RegExp(r'(\d{1,2})[\/\-](\d{1,2})');
+  final now = DateTime.now();
+
+  DateTime? targetDate;
+  final match = datePattern.firstMatch(userInput);
+  if (match != null) {
+    final month = int.tryParse(match.group(1)!);
+    final day = int.tryParse(match.group(2)!);
+    if (month != null && day != null) {
+      targetDate = DateTime(now.year, month, day);
     }
   }
+
+  Map<String, dynamic>? matched;
+
+  // ✅ 先用日期找
+  if (targetDate != null) {
+    debugPrint('📅 嘗試比對日期：$targetDate');
+    matched = memories.firstWhere(
+      (m) {
+        final ts = m['createdAt']; // 🔁 改成 createdAt
+
+        if (ts is Timestamp) {
+          final memDate = ts.toDate();
+          return memDate.year == targetDate!.year &&
+                memDate.month == targetDate.month &&
+                memDate.day == targetDate.day;
+        } else if (ts is String) {
+          try {
+            final memDate = DateTime.parse(ts);
+            return memDate.year == targetDate!.year &&
+                  memDate.month == targetDate.month &&
+                  memDate.day == targetDate.day;
+          } catch (_) {
+            return false;
+          }
+        }
+
+        return false;
+      },
+      orElse: () => {},
+    );
+  }
+
+  // ✅ 再用文字比對
+  matched ??= memories.firstWhere(
+    (m) => keywords.any((kw) =>
+        (m['title'] ?? '').toString().contains(kw) ||
+        (m['description'] ?? '').toString().contains(kw)),
+    orElse: () => {},
+  );
+
+  final audioUrl = matched['audioPath'];
+  if (audioUrl == null || audioUrl.isEmpty) {
+    debugPrint('❌ 沒有找到匹配的記憶或 audioPath 為空');
+    return false;
+  }
+
+  // ✅ 成功的話記住這筆記憶
+  _lastPlayedMemory = matched;
+  return await _playAudioFromPath(audioUrl);
+}
+
+
+
+Future<bool> _playAudioFromPath(String path) async {
+  try {
+    await _audioPlayer.stop();
+    await _flutterTts.stop();
+
+    if (path.startsWith('http')) {
+      await _audioPlayer.setUrl(path);
+    } else if (path.startsWith('gs://')) {
+      final ref = FirebaseStorage.instance.refFromURL(path);
+      final downloadUrl = await ref.getDownloadURL();
+      print('☁️ Firebase Storage URL: $downloadUrl');
+      await _audioPlayer.setUrl(downloadUrl);
+    } else {
+      print('📁 播放本地音檔: $path');
+      await _audioPlayer.setFilePath(path); // 僅限手機
+    }
+
+    await _audioPlayer.play();
+    print('▶️ 開始播放音檔');
+    return true;
+  } catch (e) {
+    print('❌ 音檔播放失敗: $e');
+    return false;
+  }
+}
 
   /// 處理訊息並請求 AI 回覆
   Future<String?> processUserMessage(String prompt) async {
@@ -141,14 +224,15 @@ class AICompanionService {
             {
               'text': '''
 你是一位溫柔且簡潔的 AI 陪伴者，擅長傾聽與陪伴使用者，幫助他們回憶過去的美好往事，並提醒即將到來的重要任務。
+如果使用者提到希望「聽錄音」、「播放」、「聽某段記憶」，請直接回應播放結束，並在文字後面加上 `[播放回憶錄]` 標記。
 
 📌 注意重點：
 
-1. 「回憶錄」是使用者曾經記錄過的**過去經歷**，請協助他回想與分享當時的感受與細節。
+1. 「回憶錄」是使用者曾經記錄過的**過去經歷**，請利用回憶錄紀錄的事項(錄音、描述)協助他回想與分享當時的感受與細節。
 2. 「行事曆任務」是未來即將發生的事件，例如吃藥、活動、看診，請用來提醒他注意安排。
 3. 不要混淆「回憶」與「任務」，你的任務是陪伴與引導回憶。
-4. 你可以說：「這個回憶真棒，要不要聽聽那段錄音？」
-5.請回答於50字以內，若對話時間有一小時內的任務可以提醒使用者。
+4.請回答於50字以內，若對話時間有一小時內的任務可以提醒使用者。
+5.請根據他之前說過的內容延續對話、更新記憶，不要出現重複傳話的狀況。
 
 🧠 以下是使用者的回憶摘要：
 $memorySummary
