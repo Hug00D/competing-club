@@ -22,6 +22,7 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _roleController = TextEditingController();
   String _role = '';
   String? _uid;
   String? _identityCode;
@@ -33,6 +34,8 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     _loadProfile();
+
+    _roleController.text = _role == 'caregiver' ? '照顧者' : '被照顧者';
   }
 
   /// ✅ 從 Firestore 讀取個人資料
@@ -92,8 +95,14 @@ class _ProfilePageState extends State<ProfilePage> {
   /// ✅ 登出功能
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
-    if (mounted) {
-      Navigator.pushReplacementNamed(context, '/'); // 登出後導回登入頁
+
+    // 等待一點點時間避免 race condition
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    if (!mounted) return;
+
+    if (context.mounted) {
+      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     }
   }
 
@@ -250,24 +259,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  /// ✅ 下拉選單（照顧者/被照顧者）
-  Widget _buildRoleDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _role.isNotEmpty ? _role : null,
-      style: const TextStyle(color: Colors.black),
-      dropdownColor: Colors.white,
-      decoration: const InputDecoration(
-        labelText: '身分',
-        border: OutlineInputBorder(),
-      ),
-      items: const [
-        DropdownMenuItem(value: 'caregiver', child: Text('照顧者')),
-        DropdownMenuItem(value: 'user', child: Text('被照顧者')),
-      ],
-      onChanged: (value) => setState(() => _role = value!),
-    );
-  }
-
   /// ✅ 顯示唯一識別碼（可長按複製）
   Widget _buildIdentityCodeField() {
     return _identityCode == null || _identityCode!.isEmpty
@@ -304,122 +295,170 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+
   @override
   Widget build(BuildContext context) {
-    final themeColor = Colors.blue.shade600;
+    const themeColor = Color(0xFF4FC3F7);
+    const backgroundGradient = LinearGradient(
+      colors: [Color(0xFFE0F7FA), Color(0xFFE0F2F1)],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      extendBody: true,
       appBar: AppBar(
         title: const Text('個人檔案'),
         backgroundColor: themeColor,
         foregroundColor: Colors.white,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            /// ✅ 頭像（支援上傳）
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: Colors.grey.shade300,
-              backgroundImage: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
-                  ? NetworkImage(_avatarUrl!)
-                  : const AssetImage('assets/images/default_avatar.png')
-              as ImageProvider,
-              child: Align(
-                alignment: Alignment.bottomRight,
-                child: GestureDetector(
-                  onTap: _pickAndUploadAvatar,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(gradient: backgroundGradient),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 8),
+
+                /// ✅ 頭像（置中）
+                Center(
+                  child: Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.grey.shade300,
+                        backgroundImage: (_avatarUrl != null && _avatarUrl!.isNotEmpty)
+                            ? NetworkImage(_avatarUrl!)
+                            : const AssetImage('assets/images/default_avatar.png')
+                        as ImageProvider,
+                      ),
+                      GestureDetector(
+                        onTap: _pickAndUploadAvatar,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color.fromRGBO(0, 0, 0, 0.2),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          padding: const EdgeInsets.all(4),
+                          child: const Icon(Icons.camera_alt, size: 20, color: Colors.black87),
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                /// ✅ 名稱輸入框
+                TextField(
+                  controller: _nameController,
+                  style: const TextStyle(color: Colors.black, fontSize: 20),
+                  decoration: const InputDecoration(
+                    labelText: '名稱',
+                    labelStyle: TextStyle( // 🔸 加這段讓 label 更明顯
+                      color: Colors.black87,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
                     ),
-                    padding: const EdgeInsets.all(4),
-                    child: const Icon(Icons.camera_alt, size: 20, color: Colors.black87),
+                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: Colors.white,
                   ),
                 ),
-              ),
-            ),
 
-            const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
-            /// ✅ 名稱輸入框
-            TextField(
-              controller: _nameController,
-              style: const TextStyle(color: Colors.black),
-              decoration: const InputDecoration(
-                labelText: '名稱',
-                border: OutlineInputBorder(),
-              ),
-            ),
+                /// ✅ 顯示身分
+                TextFormField(
+                  controller: _roleController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: '身分',
+                    labelStyle: TextStyle( // 🔸 加這段讓 label 更明顯
+                      color: Colors.black87,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  style: const TextStyle(color: Colors.black, fontSize: 20),
+                ),
 
-            const SizedBox(height: 20),
-            _buildRoleDropdown(),
-            _buildIdentityCodeField(),
+                /// ✅ 唯一識別碼（長按複製）
+                _buildIdentityCodeField(),
 
-            const SizedBox(height: 32),
-            SwitchListTile(
-              value: _locationEnabled,
-              onChanged: (value) {
-                setState(() => _locationEnabled = value);
-              },
-              title: const Text('啟用位置上傳'),
-              subtitle: const Text('開啟後照顧者可查看您的即時位置'),
-              activeColor: themeColor,
-            ),
-            const SizedBox(height: 12),
+                const SizedBox(height: 32),
 
-            /// ✅ 儲存按鈕
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: themeColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                /// ✅ 位置開關
+                SwitchListTile(
+                  value: _locationEnabled,
+                  onChanged: (value) => setState(() => _locationEnabled = value),
+                  title: const Text(
+                    '啟用位置上傳',
+                    style: TextStyle(color: Colors.black, fontSize: 20),
+                  ),
+                  subtitle: const Text(
+                      '開啟後照顧者可查看您的即時位置',
+                    style: TextStyle(fontSize: 18, color: Colors.black54),
+                  ),
+                  activeColor: themeColor,
+                ),
+
+                const SizedBox(height: 20),
+
+                /// ✅ 儲存按鈕
+                ElevatedButton(
+                  onPressed: _saveProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themeColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 4,
+                  ),
+                  child: const Text('儲存變更', style: TextStyle(fontSize: 16)),
+                ),
+
+                const SizedBox(height: 16),
+
+                /// 🔴 登出按鈕
+                OutlinedButton.icon(
+                  onPressed: _logout,
+                  icon: const Icon(Icons.logout),
+                  label: const Text('登出', style: TextStyle(fontSize: 16)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                 ),
-                child: const Text('儲存變更', style: TextStyle(fontSize: 16)),
-              ),
+              ],
             ),
-
-            const SizedBox(height: 16),
-
-            /// 🔴 登出按鈕
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _logout,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                icon: const Icon(Icons.logout),
-                label: const Text('登出', style: TextStyle(fontSize: 16)),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+
 }

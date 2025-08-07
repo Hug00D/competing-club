@@ -154,12 +154,12 @@ class _MainMenuPageState extends State<MainMenuPage> {
         required VoidCallback onTap,
       }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 20),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 70, // 微降高度
+          height: 100, // 微降高度
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -171,7 +171,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
               ),
             ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(
             children: [
               Container(
@@ -180,14 +180,14 @@ class _MainMenuPageState extends State<MainMenuPage> {
                   color: color.withAlpha((255 * 0.15).toInt()),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 28, color: color),
+                child: Icon(icon, size: 36, color: color),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
                   label,
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 26,
                     fontWeight: FontWeight.w600,
                     color: Colors.black87,
                   ),
