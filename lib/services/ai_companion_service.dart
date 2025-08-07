@@ -37,6 +37,21 @@ class AICompanionService {
     }).toList();
   }
 
+  Future<bool> playMemoryAudioFromUrl(String url) async {
+  try {
+    await _audioPlayer.stop();
+    await _flutterTts.stop();
+    await _audioPlayer.setUrl(url);
+    await _audioPlayer.play();
+    debugPrint('▶️ 成功播放 AI 指定音檔：$url');
+    return true;
+  } catch (e) {
+    debugPrint('❌ 無法播放 AI 指定音檔：$e');
+    return false;
+  }
+}
+
+
   /// 若有任務在一小時內，語音提醒
   Future<void> remindIfUpcomingTask() async {
     final tasks = await fetchTodayTasks();
@@ -111,52 +126,61 @@ Future<bool> playMemoryAudioIfMatch(String userInput) async {
     return false;
   }
 
-  // ✅ 從輸入找日期（例如 8/6）
-  final datePattern = RegExp(r'(\d{1,2})[\/\-](\d{1,2})');
-  final now = DateTime.now();
-
-  DateTime? targetDate;
-  final match = datePattern.firstMatch(userInput);
-  if (match != null) {
-    final month = int.tryParse(match.group(1)!);
-    final day = int.tryParse(match.group(2)!);
-    if (month != null && day != null) {
-      targetDate = DateTime(now.year, month, day);
-    }
-  }
-
   Map<String, dynamic>? matched;
 
-  // ✅ 先用日期找
-  if (targetDate != null) {
-    debugPrint('📅 嘗試比對日期：$targetDate');
+  // ✅ 先檢查是否有 AI 給的 [播放回憶錄] 標題
+  final titleMatch = RegExp(r'\[播放回憶錄\].*標題[:：]\s*(.+)').firstMatch(userInput);
+  final titleFromAI = titleMatch?.group(1)?.trim();
+  if (titleFromAI != null && titleFromAI.isNotEmpty) {
+    debugPrint('🧠 從 AI 傳回取得標題: $titleFromAI');
     matched = memories.firstWhere(
-      (m) {
-        final ts = m['createdAt']; // 🔁 改成 createdAt
-
-        if (ts is Timestamp) {
-          final memDate = ts.toDate();
-          return memDate.year == targetDate!.year &&
-                memDate.month == targetDate.month &&
-                memDate.day == targetDate.day;
-        } else if (ts is String) {
-          try {
-            final memDate = DateTime.parse(ts);
-            return memDate.year == targetDate!.year &&
-                  memDate.month == targetDate.month &&
-                  memDate.day == targetDate.day;
-          } catch (_) {
-            return false;
-          }
-        }
-
-        return false;
-      },
+      (m) => (m['title'] ?? '').toString().contains(titleFromAI),
       orElse: () => {},
     );
   }
 
-  // ✅ 再用文字比對
+  // ✅ 若沒找到，從輸入找日期（例如 8/6）
+  if (matched == null || matched.isEmpty) {
+    final datePattern = RegExp(r'(\d{1,2})[\/\-](\d{1,2})');
+    final now = DateTime.now();
+    DateTime? targetDate;
+    final match = datePattern.firstMatch(userInput);
+    if (match != null) {
+      final month = int.tryParse(match.group(1)!);
+      final day = int.tryParse(match.group(2)!);
+      if (month != null && day != null) {
+        targetDate = DateTime(now.year, month, day);
+      }
+    }
+
+    if (targetDate != null) {
+      debugPrint('📅 嘗試比對日期：$targetDate');
+      matched = memories.firstWhere(
+        (m) {
+          final ts = m['createdAt'];
+          if (ts is Timestamp) {
+            final memDate = ts.toDate();
+            return memDate.year == targetDate!.year &&
+                memDate.month == targetDate.month &&
+                memDate.day == targetDate.day;
+          } else if (ts is String) {
+            try {
+              final memDate = DateTime.parse(ts);
+              return memDate.year == targetDate!.year &&
+                  memDate.month == targetDate.month &&
+                  memDate.day == targetDate.day;
+            } catch (_) {
+              return false;
+            }
+          }
+          return false;
+        },
+        orElse: () => {},
+      );
+    }
+  }
+
+  // ✅ 若仍找不到，最後使用文字關鍵字比對
   matched ??= memories.firstWhere(
     (m) => keywords.any((kw) =>
         (m['title'] ?? '').toString().contains(kw) ||
@@ -170,10 +194,10 @@ Future<bool> playMemoryAudioIfMatch(String userInput) async {
     return false;
   }
 
-  // ✅ 成功的話記住這筆記憶
   _lastPlayedMemory = matched;
   return await _playAudioFromPath(audioUrl);
 }
+
 
 
 
@@ -203,6 +227,44 @@ Future<bool> _playAudioFromPath(String path) async {
   }
 }
 
+  Future<String?> generateSmartSuggestion(List<String> recentMessages) async {
+    const apiKey = 'AIzaSyCSiUQBqYBaWgpxHr37RcuKoaiiUOUfQhs';
+    const url =
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey';
+
+    final prompt = '''
+  你是一位溫柔的 AI 陪伴者，請根據以下三句使用者的訊息，生成一句簡短的對話建議，用於延續對話，請使用繁體中文並控制在 10 字以內，只回傳純文字即可，不要加標點：
+
+  ${recentMessages.join('\n')}
+  ''';
+
+    final body = jsonEncode({
+      'contents': [
+        {
+          'parts': [
+            {'text': prompt}
+          ]
+        }
+      ]
+    });
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
+      return text?.replaceAll(RegExp(r'[。！\s]'), '');
+    } else {
+      debugPrint('❌ generateSmartSuggestion failed: ${response.body}');
+      return null;
+    }
+  }
+
+
   /// 處理訊息並請求 AI 回覆
   Future<String?> processUserMessage(String prompt) async {
     const apiKey = 'AIzaSyCSiUQBqYBaWgpxHr37RcuKoaiiUOUfQhs';
@@ -224,15 +286,21 @@ Future<bool> _playAudioFromPath(String path) async {
             {
               'text': '''
 你是一位溫柔且簡潔的 AI 陪伴者，擅長傾聽與陪伴使用者，幫助他們回憶過去的美好往事，並提醒即將到來的重要任務。
-如果使用者提到希望「聽錄音」、「播放」、「聽某段記憶」，請直接回應播放結束，並在文字後面加上 `[播放回憶錄]` 標記。
+如果使用者提到希望「聽錄音」、「播放」、「聽某段記憶」，請撥放回憶。並且撥放文字加上 `[播放回憶錄]` 標記。
 
 📌 注意重點：
 
 1. 「回憶錄」是使用者曾經記錄過的**過去經歷**，請利用回憶錄紀錄的事項(錄音、描述)協助他回想與分享當時的感受與細節。
 2. 「行事曆任務」是未來即將發生的事件，例如吃藥、活動、看診，請用來提醒他注意安排。
 3. 不要混淆「回憶」與「任務」，你的任務是陪伴與引導回憶。
-4.請回答於50字以內，若對話時間有一小時內的任務可以提醒使用者。
-5.請根據他之前說過的內容延續對話、更新記憶，不要出現重複傳話的狀況。
+4.請回答於50字以內，若對話時間前後三十分鐘的任務可以提醒使用者。請注意，若您沒有提供即將發生的任務（例如吃藥、外出），請不要自己添加提醒。只有真正從行事曆任務資料中查到事項，才應該主動提醒。
+5.請根據他之前說過的內容延續對話、更新記憶。
+
+若使用者希望播放記憶錄，請只回傳標題文字，不要直接回傳音檔網址或完整記憶內容。記得加上 [播放回憶錄] 標記以提示系統播放。
+
+範例：
+好的，我幫您播放那次旅行的回憶。 [播放回憶錄] 標題: 出門玩
+
 
 🧠 以下是使用者的回憶摘要：
 $memorySummary
