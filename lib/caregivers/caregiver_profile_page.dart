@@ -145,18 +145,18 @@ class _CaregiverProfilePageState extends State<CaregiverProfilePage> {
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC), // 柔和背景
+      backgroundColor: const Color(0xFFD8F2DA), // ✅ 柔綠背景
       appBar: AppBar(
         title: const Text('照顧者個人檔案'),
-        backgroundColor: Colors.blue.shade600,
+        backgroundColor: const Color(0xFF28965A), // ✅ 主綠
         foregroundColor: Colors.white,
-        elevation: 0,
+        elevation: 2,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -165,23 +165,23 @@ class _CaregiverProfilePageState extends State<CaregiverProfilePage> {
           const SizedBox(height: 20),
 
           // 🔹 標題 & 小說明
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   '已綁定的被照顧者',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: Color(0xFF333333),
                   ),
                 ),
                 SizedBox(height: 6),
                 Text(
                   '你可以在這裡管理被照顧者的暱稱',
-                  style: TextStyle(fontSize: 14, color: Colors.black54),
+                  style: TextStyle(fontSize: 14, color: Color(0xFF777777)),
                 ),
               ],
             ),
@@ -194,7 +194,8 @@ class _CaregiverProfilePageState extends State<CaregiverProfilePage> {
             child: _linkedUsers.isEmpty
                 ? const Center(
               child: Text('尚未綁定任何被照顧者',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+                  style:
+                  TextStyle(fontSize: 16, color: Colors.grey)),
             )
                 : ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -206,9 +207,12 @@ class _CaregiverProfilePageState extends State<CaregiverProfilePage> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: const Color(0xFF77A88D), width: 1.2),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black12.withValues(alpha: 0.05),
+                        color:
+                        Colors.grey.withAlpha(25), // 約 10% 陰影
                         blurRadius: 6,
                         offset: const Offset(0, 3),
                       ),
@@ -217,24 +221,29 @@ class _CaregiverProfilePageState extends State<CaregiverProfilePage> {
                   child: ListTile(
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 14),
-                    leading: CircleAvatar(
-                      radius: 26,
-                      backgroundColor: Colors.blue.shade100,
+                    leading: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2CEAA3)
+                            .withAlpha(51), // 約 20%
+                        shape: BoxShape.circle,
+                      ),
                       child: const Icon(Icons.person,
-                          size: 30, color: Colors.blue),
+                          size: 30, color: Color(0xFF28965A)),
                     ),
                     title: Text(
                       user['name'] ?? '未命名',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: Color(0xFF333333),
                       ),
                     ),
                     subtitle: Text(
                       '暱稱: ${user['nickname']?.isNotEmpty == true ? user['nickname'] : '未設定'}',
                       style: const TextStyle(
-                          color: Colors.grey, fontSize: 14),
+                          color: Color(0xFF777777), fontSize: 14),
                     ),
                     trailing: IconButton(
                       icon: const Icon(Icons.edit,
@@ -272,5 +281,6 @@ class _CaregiverProfilePageState extends State<CaregiverProfilePage> {
       ),
     );
   }
+
 
 }

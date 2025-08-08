@@ -14,7 +14,6 @@ class CaregiverHomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final routeData = ModalRoute.of(context)?.settings.arguments;
 
-    // ✅ 1. 如果 arguments 有傳進來 → 更新 Session
     if (routeData != null && routeData is Map<String, dynamic>) {
       if (routeData['selectedCareReceiverUid'] != null) {
         CaregiverSession.selectedCareReceiverUid = routeData['selectedCareReceiverUid'];
@@ -27,7 +26,6 @@ class CaregiverHomePage extends StatelessWidget {
       }
     }
 
-    // ✅ 2. 如果 userData 也有（第一次登入進來時用） → 更新 Session
     if (userData != null) {
       if (userData!['uid'] != null) {
         CaregiverSession.selectedCareReceiverUid = userData!['uid'];
@@ -40,150 +38,156 @@ class CaregiverHomePage extends StatelessWidget {
       }
     }
 
-    // ✅ 3. 從 Session 讀取目前查看對象
     final String name = CaregiverSession.selectedCareReceiverName ?? '未命名';
     final String identityCode = CaregiverSession.selectedCareReceiverIdentityCode ?? '無代碼';
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        backgroundColor: Colors.teal,
-        title: const Text('照顧者後台', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.switch_account),
-            tooltip: '切換查看對象',
-            onPressed: () {
-              // ✅ 切換時清掉 Session
-              CaregiverSession.selectedCareReceiverUid = null;
-              CaregiverSession.selectedCareReceiverName = null;
-              CaregiverSession.selectedCareReceiverIdentityCode = null;
-
-              Navigator.pushReplacementNamed(context, '/selectUser');
-            },
+      // ✅ 背景改為漸層綠
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
-        ],
-        elevation: 3,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoCard(name, identityCode),
-            const SizedBox(height: 24),
-            const Text('功能選單',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
-            const SizedBox(height: 12),
-
-            // ✅ 查看行事曆
-            _buildMenuCard(
-              context,
-              icon: Icons.calendar_today,
-              label: '查看任務行事曆',
-              color: Colors.teal,
-              onTap: () {
-                debugPrint('目前查看對象代碼: ${CaregiverSession.selectedCareReceiverIdentityCode}');
-                final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
-                final caregiverName = '照顧者';
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => UserTaskPage(
-                      targetUid: CaregiverSession.selectedCareReceiverUid!, // ✅ 直接用 Session
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ✅ AppBar 改為自訂樣式
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '照顧者後台',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2E7D32),
+                      ),
                     ),
-                    settings: RouteSettings(
-                      arguments: {
-                        'fromCaregiver': true,
-                        'caregiverUid': caregiverUid,
-                        'caregiverName': caregiverName,
+                    IconButton(
+                      icon: const Icon(Icons.switch_account, color: Color(0xFF2E7D32)),
+                      tooltip: '切換查看對象',
+                      onPressed: () {
+                        CaregiverSession.selectedCareReceiverUid = null;
+                        CaregiverSession.selectedCareReceiverName = null;
+                        CaregiverSession.selectedCareReceiverIdentityCode = null;
+                        Navigator.pushReplacementNamed(context, '/selectUser');
                       },
                     ),
-                  ),
-                );
-              },
-            ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildInfoCard(name, identityCode),
+                const SizedBox(height: 24),
+                const Text(
+                  '功能選單',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+                const SizedBox(height: 12),
 
-            // ✅ 查看回憶錄
-            _buildMenuCard(
-              context,
-              icon: Icons.photo_library,
-              label: '查看回憶錄',
-              color: Colors.deepPurple,
-              onTap: () {
-                final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
-                final caregiverName = '照顧者';
-                Navigator.push(
+                // ✅ 功能卡片們（綠為主，藍為輔）
+                _buildMenuCard(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => MemoryPage(
-                      targetUid: CaregiverSession.selectedCareReceiverUid!,
-                    ),
-                    settings: RouteSettings(
-                      arguments: {
-                        'fromCaregiver': true,
-                        'caregiverUid': caregiverUid,
-                        'caregiverName': caregiverName,
-                      },
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            // ✅ 查看任務完成率
-            _buildMenuCard(
-              context,
-              icon: Icons.bar_chart,
-              label: '查看任務完成率',
-              color: Colors.deepOrangeAccent,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => TaskStatisticsPage(
-                      targetUid: CaregiverSession.selectedCareReceiverUid!,
-                      targetName: CaregiverSession.selectedCareReceiverName ?? '未命名',
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            // ✅ 個人檔案
-            _buildMenuCard(
-              context,
-              icon: Icons.person,
-              label: '個人檔案',
-              color: Colors.indigo,
-              onTap: () {
-                Navigator.pushReplacementNamed(context, '/careProfile');
-              },
-            ),
-            _buildMenuCard(
-              context,
-              icon: Icons.location_on,
-              label: '查看定位地圖',
-              color: Colors.green,
-              onTap: () {
-                Navigator.pushNamed(
-                  context,
-                  '/map',
-                  arguments: {
-                    'selectedCareReceiverUid': CaregiverSession.selectedCareReceiverUid,
-                    'selectedCareReceiverName': CaregiverSession.selectedCareReceiverName,
-                    'selectedCareReceiverIdentityCode': CaregiverSession.selectedCareReceiverIdentityCode,
+                  icon: Icons.calendar_today,
+                  label: '查看任務行事曆',
+                  color: const Color(0xFF4CAF50),
+                  onTap: () {
+                    final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
+                    final caregiverName = '照顧者';
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserTaskPage(
+                          targetUid: CaregiverSession.selectedCareReceiverUid!,
+                        ),
+                        settings: RouteSettings(arguments: {
+                          'fromCaregiver': true,
+                          'caregiverUid': caregiverUid,
+                          'caregiverName': caregiverName,
+                        }),
+                      ),
+                    );
                   },
-                );
-              },
+                ),
+                _buildMenuCard(
+                  context,
+                  icon: Icons.photo_library,
+                  label: '查看回憶錄',
+                  color: const Color(0xFF64B5F6),
+                  onTap: () {
+                    final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
+                    final caregiverName = '照顧者';
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => MemoryPage(
+                          targetUid: CaregiverSession.selectedCareReceiverUid!,
+                        ),
+                        settings: RouteSettings(arguments: {
+                          'fromCaregiver': true,
+                          'caregiverUid': caregiverUid,
+                          'caregiverName': caregiverName,
+                        }),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuCard(
+                  context,
+                  icon: Icons.bar_chart,
+                  label: '查看任務完成率',
+                  color: const Color(0xFF81C784),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TaskStatisticsPage(
+                          targetUid: CaregiverSession.selectedCareReceiverUid!,
+                          targetName: CaregiverSession.selectedCareReceiverName ?? '未命名',
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuCard(
+                  context,
+                  icon: Icons.person,
+                  label: '個人檔案',
+                  color: const Color(0xFF81D4FA),
+                  onTap: () {
+                    Navigator.pushNamed(context, '/careProfile');
+                  },
+                ),
+                _buildMenuCard(
+                  context,
+                  icon: Icons.location_on,
+                  label: '查看定位地圖',
+                  color: const Color(0xFF1976D2),
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/map',
+                      arguments: {
+                        'selectedCareReceiverUid': CaregiverSession.selectedCareReceiverUid,
+                        'selectedCareReceiverName': CaregiverSession.selectedCareReceiverName,
+                        'selectedCareReceiverIdentityCode': CaregiverSession.selectedCareReceiverIdentityCode,
+                      },
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  /// ✅ 被照顧者資訊卡片
   Widget _buildInfoCard(String name, String identityCode) {
     return Container(
       width: double.infinity,
@@ -207,13 +211,12 @@ class CaregiverHomePage extends StatelessWidget {
           const SizedBox(height: 8),
           Text('姓名：$name', style: const TextStyle(fontSize: 16, color: Colors.black)),
           Text('識別碼：$identityCode',
-              style: TextStyle(fontSize: 16, color: Colors.black)),
+              style: const TextStyle(fontSize: 16, color: Colors.black)),
         ],
       ),
     );
   }
 
-  /// ✅ 功能選單按鈕
   Widget _buildMenuCard(
       BuildContext context, {
         required IconData icon,
@@ -260,4 +263,5 @@ class CaregiverHomePage extends StatelessWidget {
       ),
     );
   }
+
 }
