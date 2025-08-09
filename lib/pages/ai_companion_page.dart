@@ -167,7 +167,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
 
     final buttons = _fixedPrompts.map(_buildPromptButton).toList();
 
-    if (userMessages.length >= 3 && userMessages.length % 3 == 0 && aiMessages.isNotEmpty) {
+    if (userMessages.length >= 5 && userMessages.length % 5 == 0 && aiMessages.isNotEmpty) {
       final last3 = userMessages.sublist(userMessages.length - 3);
       final smart = await _service.generateSmartSuggestion(last3);
 
