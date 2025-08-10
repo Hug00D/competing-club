@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:memory/services/safe_zone_setting_page.dart';
 
 class NavHomePage extends StatefulWidget {
   final String careReceiverUid;
@@ -14,9 +15,11 @@ class NavHomePage extends StatefulWidget {
 }
 
 class _NavHomePageState extends State<NavHomePage> {
-  GoogleMapController? mapController;
+  GoogleMapController? _mapController;
   LatLng? _currentPosition;
   LatLng? _careReceiverPosition;
+  LatLng? _safeZoneCenter;
+  double _safeZoneRadius = 300;
 
   @override
   void initState() {
@@ -25,17 +28,13 @@ class _NavHomePageState extends State<NavHomePage> {
     _init();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   Future<void> _init() async {
-    await _initPosition();
+    await _initCurrentPosition();
     await _loadCareReceiverLocation();
+    await _loadSafeZone();
   }
 
-  Future<void> _initPosition() async {
+  Future<void> _initCurrentPosition() async {
     debugPrint('📍 開始取得目前位置');
 
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -59,8 +58,9 @@ class _NavHomePageState extends State<NavHomePage> {
     setState(() {
       _currentPosition = LatLng(pos.latitude, pos.longitude);
     });
-  }
 
+    _tryMoveToCareReceiver();
+  }
 
   Future<void> _loadCareReceiverLocation() async {
     debugPrint('🚀 開始載入被照顧者位置');
@@ -70,10 +70,9 @@ class _NavHomePageState extends State<NavHomePage> {
           .doc(widget.careReceiverUid)
           .get();
 
-      debugPrint('✅ 是否存在: ${doc.exists}');
-      debugPrint('📍 Firebase 拿到位置資料: ${doc.data()}');
-
       final data = doc.data();
+      debugPrint('📍 Firebase 拿到資料: $data');
+
       if (data != null && data['location'] != null) {
         final lat = data['location']['lat'];
         final lng = data['location']['lng'];
@@ -81,13 +80,60 @@ class _NavHomePageState extends State<NavHomePage> {
           _careReceiverPosition = LatLng(lat, lng);
         });
 
-        mapController?.animateCamera(
-          CameraUpdate.newLatLngZoom(_careReceiverPosition!, 16),
-        );
+        _tryMoveToCareReceiver();
       }
     } catch (e, stack) {
       debugPrint('🔥 載入被照顧者位置錯誤: $e');
       debugPrint(stack.toString());
+    }
+  }
+
+  Future<void> _loadSafeZone() async {
+    debugPrint('🟢 載入 safeZone 資料...');
+    try {
+      final docRef = FirebaseFirestore.instance.collection('users').doc(widget.careReceiverUid);
+      final doc = await docRef.get();
+      final data = doc.data();
+
+      if (data != null && data['safeZone'] != null) {
+        final zone = data['safeZone'];
+        setState(() {
+          _safeZoneCenter = LatLng(zone['lat'], zone['lng']);
+          _safeZoneRadius = (zone['radius'] ?? 300).toDouble();
+        });
+      } else {
+        // ⛳ 自動補上預設值
+        const defaultLat = 24.1777546;
+        const defaultLng = 120.6429611;
+        const defaultRadius = 300.0;
+
+        await docRef.update({
+          'safeZone': {
+            'lat': defaultLat,
+            'lng': defaultLng,
+            'radius': defaultRadius,
+          }
+        });
+
+        setState(() {
+          _safeZoneCenter = const LatLng(defaultLat, defaultLng);
+          _safeZoneRadius = defaultRadius;
+        });
+
+        debugPrint('🟢 SafeZone 不存在，自動補上預設值');
+      }
+    } catch (e) {
+      debugPrint('❌ 載入 safeZone 失敗: $e');
+    }
+  }
+
+
+  void _tryMoveToCareReceiver() {
+    if (_mapController != null && _careReceiverPosition != null) {
+      debugPrint('📌 移動鏡頭到被照顧者位置');
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(_careReceiverPosition!, 16),
+      );
     }
   }
 
@@ -99,6 +145,29 @@ class _NavHomePageState extends State<NavHomePage> {
           "被照顧者位置",
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '設定安全範圍',
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SafeZoneSettingPage(
+                      careReceiverUid: widget.careReceiverUid,
+                    ),
+                  ),
+                );
+
+                if (result == 'updated') {
+                  // 使用者有儲存，重新載入 safeZone
+                  await _loadCareReceiverLocation(); // 如果你將 safeZone 存在 user 裡，可寫成 _loadSafeZone()
+                  _tryMoveToCareReceiver(); // 更新地圖鏡頭
+                  setState(() {}); // 重新 render
+                }
+              }
+          )
+        ],
       ),
       body: _currentPosition == null
           ? const Center(child: CircularProgressIndicator())
@@ -107,7 +176,10 @@ class _NavHomePageState extends State<NavHomePage> {
           target: _currentPosition!,
           zoom: 16,
         ),
-        onMapCreated: (controller) => mapController = controller,
+        onMapCreated: (controller) {
+          _mapController = controller;
+          _tryMoveToCareReceiver();
+        },
         myLocationEnabled: true,
         myLocationButtonEnabled: true,
         markers: {
@@ -122,8 +194,21 @@ class _NavHomePageState extends State<NavHomePage> {
               position: _careReceiverPosition!,
               infoWindow: const InfoWindow(title: "被照顧者"),
               icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueBlue),
+                BitmapDescriptor.hueBlue,
+              ),
             ),
+        },
+        circles: _safeZoneCenter == null
+            ? {}
+            : {
+          Circle(
+            circleId: const CircleId("safeZone"),
+            center: _safeZoneCenter!,
+            radius: _safeZoneRadius,
+            fillColor: Colors.green.withAlpha(80),
+            strokeColor: Colors.green,
+            strokeWidth: 2,
+          ),
         },
       ),
     );
