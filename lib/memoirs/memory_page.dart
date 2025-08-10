@@ -207,16 +207,16 @@ class _MemoryPageState extends State<MemoryPage> {
                                 borderRadius: BorderRadius.circular(16),
                                 child: memory.imagePaths.isNotEmpty
                                     ? Image.network(
-                                        memory.imagePaths.first,
-                                        width: double.infinity,
-                                        height: 120,
-                                        fit: BoxFit.cover,
-                                      )
+                                  memory.imagePaths.first,
+                                  width: double.infinity,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                )
                                     : Container(
-                                        width: double.infinity,
-                                        height: 120,
-                                        color: Colors.grey[300],
-                                      ),
+                                  width: double.infinity,
+                                  height: 120,
+                                  color: Colors.grey[300],
+                                ),
                               ),
                               const SizedBox(height: 6),
                               Text(
@@ -304,15 +304,15 @@ class _MemoryPageState extends State<MemoryPage> {
                           ),
                           child: memory.imagePaths.isNotEmpty
                               ? Image.network(
-                                  memory.imagePaths.first,
-                                  fit: BoxFit.contain,
-                                  width: double.infinity,
-                                )
+                            memory.imagePaths.first,
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                          )
                               : Container(
-                                  height: 100,
-                                  width: double.infinity,
-                                  color: const Color.fromARGB(255, 9, 87, 135),
-                                ),
+                            height: 100,
+                            width: double.infinity,
+                            color: const Color.fromARGB(255, 9, 87, 135),
+                          ),
                         ),
 
                         const SizedBox(height: 1),

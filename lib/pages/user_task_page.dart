@@ -305,12 +305,14 @@ class _UserTaskPageState extends State<UserTaskPage> {
   Future<void> _addTask() async {
     Map<String, String>? aiResult;
 
+    // 預先建立對話框，避免 context 跨 async
     final dialog = TaskDialog(
       listenFunction: _listen,
       initialData: aiResult,
       initialDate: selectedDate,
     );
 
+    // 使用 builder: (dialogContext) => dialog 解掉 warning
     final result = await showDialog<Map<String, String>>(
       context: context,
       builder: (dialogContext) => dialog,
@@ -322,7 +324,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
       String start = result['start'] ?? '';
       String end = result['end'] ?? '';
 
-      // ✅ 補齊時間
+      // ✅ 補齊開始/結束時間（只有一個時間時，自動補30分鐘）
       if (start.isEmpty && end.isNotEmpty) {
         final endTime = DateFormat("HH:mm").parse(end);
         start = DateFormat("HH:mm").format(endTime.subtract(const Duration(minutes: 30)));
@@ -332,9 +334,9 @@ class _UserTaskPageState extends State<UserTaskPage> {
       }
 
       final dateKey = result['date'] ?? DateFormat('yyyy-MM-dd').format(selectedDate);
-      final type = result['type'] ?? '提醒';
+      final type = result['type'] ?? '提醒'; // 如果沒傳回 type，預設為「提醒」
 
-      // ✅ 加入 taskMap
+      // ✅ 把任務加進 taskMap
       setState(() {
         taskMap.putIfAbsent(dateKey, () => []);
         taskMap[dateKey]!.add({
@@ -350,28 +352,32 @@ class _UserTaskPageState extends State<UserTaskPage> {
       // ✅ 上傳 Firebase
       await uploadTasksToFirebase(taskMap, uid);
 
-      // ✅ 安排通知（開始 + 結束）
+      // ✅ 這裡新增「通知排程」
       try {
-        final startDateTime = DateFormat('yyyy-MM-dd HH:mm').parse('$dateKey $start');
-        final endDateTime = DateFormat('yyyy-MM-dd HH:mm').parse('$dateKey $end');
+        // 1️⃣ 解析通知時間（yyyy-MM-dd + HH:mm）
+        final DateTime scheduledTime =
+        DateFormat('yyyy-MM-dd HH:mm').parse('$dateKey $start');
 
-        final int notificationId = startDateTime.hashCode;
+        // 2️⃣ 任務標題
+        final String taskTitle = result['task']!;
 
-        await NotificationService.scheduleTaskNotification(
+        // 3️⃣ 用「日期 + 時間」算通知 ID，避免重複
+        final int notificationId = scheduledTime.hashCode;
+
+        // 4️⃣ 排程通知
+        await NotificationService.scheduleExactNotification(
           id: notificationId,
           title: '任務提醒',
-          body: result['task']!,
-          startTime: startDateTime,
-          endTime: endDateTime,
+          body: '$taskTitle 的時間到了！',
+          scheduledTime: scheduledTime,
         );
 
-        debugPrint('✅ 已安排任務通知（開始 & 結束）：$start ~ $end');
+        debugPrint('✅ 已為任務 [$taskTitle] 安排通知：$scheduledTime');
       } catch (e) {
         debugPrint('❌ 通知排程錯誤: $e');
       }
     }
   }
-
 
   Future<void> _deleteTask(int index) async {
     final key = DateFormat('yyyy-MM-dd').format(selectedDate);
@@ -876,30 +882,9 @@ class _TaskDialogState extends State<TaskDialog> {
       setState(() {
         if (isStart) {
           startTime = formatted;
-
-          // 如果還沒設定結束時間，或結束時間比開始時間早，預設為開始 + 30 分鐘
-          final startDateTime = DateTime(now.year, now.month, now.day, picked.hour, picked.minute);
-          final endDateTime = startDateTime.add(const Duration(minutes: 30));
-          final formattedEnd = DateFormat('HH:mm').format(endDateTime);
-
-          if (endTime == null || endTime!.isEmpty) {
-            endTime = formattedEnd;
-          } else {
-            try {
-              final parsedEnd = DateFormat('HH:mm').parse(endTime!);
-              final existingEnd = DateTime(now.year, now.month, now.day, parsedEnd.hour, parsedEnd.minute);
-              if (existingEnd.isBefore(startDateTime)) {
-                endTime = formattedEnd;
-              }
-            } catch (_) {
-              endTime = formattedEnd;
-            }
-          }
-
         } else {
           endTime = formatted;
         }
-
       });
     }
   }
