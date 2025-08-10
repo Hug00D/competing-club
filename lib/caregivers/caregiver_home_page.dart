@@ -73,16 +73,22 @@ class CaregiverHomePage extends StatelessWidget {
                       icon: const Icon(Icons.switch_account, color: Color(0xFF2E7D32)),
                       tooltip: '切換查看對象',
                       onPressed: () {
-                        CaregiverSession.selectedCareReceiverUid = null;
-                        CaregiverSession.selectedCareReceiverName = null;
-                        CaregiverSession.selectedCareReceiverIdentityCode = null;
-                        Navigator.pushReplacementNamed(context, '/selectUser');
+                        Navigator.pushNamed(context, '/selectUser');
                       },
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
                 _buildInfoCard(name, identityCode),
+                _buildMenuCard(
+                  context,
+                  icon: Icons.person,
+                  label: '個人檔案',
+                  color: const Color(0xFF81D4FA),
+                  onTap: () {
+                    Navigator.pushNamed(context, '/careProfile');
+                  },
+                ),
                 const SizedBox(height: 24),
                 const Text(
                   '功能選單',
@@ -152,15 +158,6 @@ class CaregiverHomePage extends StatelessWidget {
                         ),
                       ),
                     );
-                  },
-                ),
-                _buildMenuCard(
-                  context,
-                  icon: Icons.person,
-                  label: '個人檔案',
-                  color: const Color(0xFF81D4FA),
-                  onTap: () {
-                    Navigator.pushNamed(context, '/careProfile');
                   },
                 ),
                 _buildMenuCard(
