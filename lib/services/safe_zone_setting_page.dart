@@ -47,8 +47,11 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
         final zone = data['safeZone'];
         if (mounted) {
           setState(() {
-            _safeZoneCenter = LatLng(zone['lat'], zone['lng']);
-            _safeZoneRadius = (zone['radius'] ?? 300).toDouble();
+            _safeZoneCenter = LatLng(
+              (zone['lat'] as num).toDouble(),
+              (zone['lng'] as num).toDouble(),
+            );
+            _safeZoneRadius = (zone['radius'] as num?)?.toDouble() ?? 300.0;
             _radiusController.text = _safeZoneRadius.toStringAsFixed(0);
             _isLoading = false;
           });
@@ -56,7 +59,7 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
       } else {
         if (mounted) {
           setState(() {
-            _safeZoneCenter = const LatLng(24.1777546, 120.6429611); // 台中
+            _safeZoneCenter = const LatLng(24.1777546, 120.6429611); // 台中（預設）
             _radiusController.text = _safeZoneRadius.toStringAsFixed(0);
             _isLoading = false;
           });
@@ -77,33 +80,34 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
   Future<void> _saveSafeZone() async {
     if (_safeZoneCenter == null) return;
 
+    // 用 set + merge 更安全（文件不存在也能寫）
     await FirebaseFirestore.instance
         .collection('users')
         .doc(widget.careReceiverUid)
-        .update({
+        .set({
       'safeZone': {
         'lat': _safeZoneCenter!.latitude,
         'lng': _safeZoneCenter!.longitude,
         'radius': _safeZoneRadius,
       }
-    });
+    }, SetOptions(merge: true));
 
     if (!mounted) return;
 
-    // 成功提示：對話框
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('已儲存'),
-        content: Text('安全範圍半徑已更新為 ${_safeZoneRadius.toStringAsFixed(0)} 公尺。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('確定'),
-          ),
-        ],
-      ),
+    // 可選：成功提示
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已儲存安全範圍：${_safeZoneRadius.toStringAsFixed(0)} m')),
     );
+
+    // 把最新 center/radius 帶回上一頁，方便即時更新
+    Navigator.pop(context, {
+      'updated': true,
+      'center': {
+        'lat': _safeZoneCenter!.latitude,
+        'lng': _safeZoneCenter!.longitude,
+      },
+      'radius': _safeZoneRadius,
+    });
   }
 
   // Haversine 公式：計算兩點距離（公尺）
@@ -137,7 +141,6 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
     final v = _radiusController.text.trim();
     final parsed = double.tryParse(v);
     if (parsed == null) {
-      // 無效輸入 → 還原顯示
       _radiusController.text = _safeZoneRadius.toStringAsFixed(0);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('請輸入有效的半徑數值')),
@@ -150,11 +153,19 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: const Color(0xFFD8F2DA),
       appBar: AppBar(
         title: const Text('設定安全範圍'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
+        actions: [
+          // 右上角快速完成（可選）
+          IconButton(
+            icon: const Icon(Icons.check),
+            tooltip: '儲存並返回',
+            onPressed: _saveSafeZone,
+          ),
+        ],
       ),
       body: _isLoading || _safeZoneCenter == null
           ? const Center(child: CircularProgressIndicator())
@@ -170,7 +181,8 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
               onMapCreated: (controller) => _mapController = controller,
               onTap: (LatLng tappedPoint) {
                 if (_safeZoneCenter != null) {
-                  final newRadius = _calculateDistanceMeters(_safeZoneCenter!, tappedPoint);
+                  final newRadius =
+                  _calculateDistanceMeters(_safeZoneCenter!, tappedPoint);
                   _setRadius(newRadius); // 同步輸入框
                 }
               },
@@ -181,6 +193,10 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
                   draggable: true,
                   onDragEnd: (newPos) {
                     setState(() => _safeZoneCenter = newPos);
+                    // 拖曳完成後移動畫面，體驗更直覺
+                    _mapController?.animateCamera(
+                      CameraUpdate.newLatLng(newPos),
+                    );
                   },
                   infoWindow: const InfoWindow(title: '安全區中心'),
                 )
@@ -218,13 +234,13 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
                     Expanded(
                       child: TextField(
                         controller: _radiusController,
-                        style: TextStyle(color: Colors.black),
+                        style: const TextStyle(color: Colors.black),
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true, signed: false,
                         ),
                         decoration: InputDecoration(
                           labelText: '輸入半徑（$_minRadius ~ $_maxRadius 公尺）',
-                          labelStyle: TextStyle(color: Colors.black54),
+                          labelStyle: const TextStyle(color: Colors.black54),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -252,7 +268,7 @@ class _SafeZoneSettingPageState extends State<SafeZoneSettingPage> {
                 ElevatedButton.icon(
                   onPressed: _saveSafeZone,
                   icon: const Icon(Icons.save),
-                  label: const Text('儲存安全範圍'),
+                  label: const Text('儲存並返回'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
                     foregroundColor: Colors.white,
