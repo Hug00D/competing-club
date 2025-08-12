@@ -1,5 +1,3 @@
-// memory_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'add_memory_page.dart';
@@ -53,12 +51,83 @@ class MemoryPage extends StatefulWidget {
   State<MemoryPage> createState() => _MemoryPageState();
 }
 
+// 2) 新增這個小元件到同一個檔案（class 之外也可）
+class _GradientPillButton extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _GradientPillButton({
+    required this.text,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 藍→綠的柔和漸層，和頁面風格一致
+    const c1 = Color(0xFF2563EB); // 藍
+    const c2 = Color(0xFF2CEAA3); // 綠
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [c1, c2],
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          // 柔和陰影，與頁面卡片一致
+          BoxShadow(
+            color: c1.withValues(alpha: .25),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(30),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(30),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(width: 4),
+                const Icon(Icons.edit_rounded, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    letterSpacing: .5,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
 class _MemoryPageState extends State<MemoryPage> {
   final List<Memory> _memories = [];
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<String> _categories = ['人物', '旅遊'];
   final Set<String> _collapsedCategories = {};
   String? _uid;
+
+
 
   @override
   void initState() {
@@ -97,7 +166,7 @@ class _MemoryPageState extends State<MemoryPage> {
 
 
 
-@override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFE3F2FD),
@@ -202,16 +271,16 @@ class _MemoryPageState extends State<MemoryPage> {
                             borderRadius: BorderRadius.circular(16),
                             child: memory.imagePaths.isNotEmpty
                                 ? Image.network(
-                                    memory.imagePaths.first,
-                                    width: double.infinity,
-                                    height: 120,
-                                    fit: BoxFit.cover,
-                                  )
+                              memory.imagePaths.first,
+                              width: double.infinity,
+                              height: 120,
+                              fit: BoxFit.cover,
+                            )
                                 : Container(
-                                    width: double.infinity,
-                                    height: 120,
-                                    color: Colors.grey[300],
-                                  ),
+                              width: double.infinity,
+                              height: 120,
+                              color: Colors.grey[300],
+                            ),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -297,15 +366,15 @@ class _MemoryPageState extends State<MemoryPage> {
                           ),
                           child: memory.imagePaths.isNotEmpty
                               ? Image.network(
-                                  memory.imagePaths.first,
-                                  fit: BoxFit.contain,
-                                  width: double.infinity,
-                                )
+                            memory.imagePaths.first,
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                          )
                               : Container(
-                                  height: 100,
-                                  width: double.infinity,
-                                  color: const Color.fromARGB(255, 9, 87, 135),
-                                ),
+                            height: 100,
+                            width: double.infinity,
+                            color: const Color.fromARGB(255, 9, 87, 135),
+                          ),
                         ),
 
                         const SizedBox(height: 1),
@@ -390,10 +459,12 @@ class _MemoryPageState extends State<MemoryPage> {
 
                   // ✏️ 編輯按鈕
                   Positioned(
-                    bottom: 20,
-                    left: 20,
-                    right: 20,
-                    child: ElevatedButton.icon(
+                    bottom: 20 + MediaQuery.of(context).padding.bottom,
+                    left: 16,
+                    right: 16,
+                    child: _GradientPillButton(
+                      text: '編輯回憶',
+                      icon: Icons.edit_rounded,
                       onPressed: () async {
                         final ok = await showEditMemoryDialog(
                           context,
@@ -405,17 +476,9 @@ class _MemoryPageState extends State<MemoryPage> {
                           category: memory.category,
                           categories: _categories,
                         );
+                        if (!mounted) return;
                         if (ok == true) _loadMemories();
                       },
-                      icon: const Icon(Icons.edit),
-                      label: const Text('編輯回憶'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
                     ),
                   ),
                 ],
