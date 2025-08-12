@@ -141,46 +141,63 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
     await p.play();
   }
 
-  Future<void> _save() async {
+  // 1) 儲存：統一用 _saveMemory()
+  Future<void> _saveMemory() async {
     if (_title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('請輸入回憶標題')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請輸入回憶標題')),
+      );
       return;
     }
 
     setState(() => _isSaving = true);
-
-    // 上傳圖片（保留已是 URL 的）
-    final List<String> imageUrls = [];
-    for (final path in _imagePaths) {
-      if (path.startsWith('http')) {
-        imageUrls.add(path);
-      } else {
-        final url = await uploadFileToCloudinary(File(path), isImage: true);
-        if (url != null) imageUrls.add(url);
+    try {
+      // 上傳圖片（保留已是 URL 的）
+      final List<String> imageUrls = [];
+      for (final path in _imagePaths) {
+        if (path.startsWith('http')) {
+          imageUrls.add(path);
+        } else {
+          final url = await uploadFileToCloudinary(File(path), isImage: true);
+          if (url != null) imageUrls.add(url);
+        }
       }
+
+      // 上傳音檔（本地才上傳）
+      String? audioUrl = _recordedPath;
+      if (_recordedPath != null && !_recordedPath!.startsWith('http')) {
+        final up = await uploadFileToCloudinary(File(_recordedPath!), isImage: false);
+        if (up != null) audioUrl = up;
+      }
+
+      await FirebaseFirestore.instance
+          .collection('memories')
+          .doc(widget.docId)
+          .update({
+        'title': _title.text.trim(),
+        'description': _desc.text.trim(),
+        'category': _selectedCategory ?? '其他',
+        'imageUrls': imageUrls,
+        'audioPath': audioUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('回憶已更新')),
+      );
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('更新失敗，請稍後再試')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
-
-    // 上傳音檔（本地才上傳）
-    String? audioUrl = _recordedPath;
-    if (_recordedPath != null && !_recordedPath!.startsWith('http')) {
-      final up = await uploadFileToCloudinary(File(_recordedPath!), isImage: false);
-      if (up != null) audioUrl = up;
-    }
-
-    await FirebaseFirestore.instance.collection('memories').doc(widget.docId).update({
-      'title': _title.text.trim(),
-      'description': _desc.text.trim(),
-      'category': _selectedCategory ?? '其他',
-      'imageUrls': imageUrls,
-      'audioPath': audioUrl,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('回憶已更新')));
-    Navigator.of(context).pop(true);
-    setState(() => _isSaving = false);
   }
+
 
   Future<void> _confirmDelete() async {
     final ok = await showDialog<bool>(
@@ -203,6 +220,76 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
   }
 
   // ---- UI helpers ----
+
+
+  Widget _primaryCTA({
+  required String text,
+  VoidCallback? onPressed,
+  IconData icon = Icons.save_rounded,   // ← 新增：可選參數＋預設值
+}) {
+  return SizedBox(
+    width: double.infinity,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Color(0x802563EB), blurRadius: 14, offset: Offset(0, 6))],
+        border: Border.all(color: Color(0xFF2563EB), width: 2),
+      ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: const Color(0xFF2563EB)),   // ← 用呼叫方傳進來的 icon
+        label: Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFF1E40AF),
+            fontWeight: FontWeight.w800,
+            fontSize: 16,
+            letterSpacing: .5,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+    ),
+  );
+}
+
+  // 新增：白底紅邊的危險樣式按鈕
+  Widget _dangerCTA({required String text, required VoidCallback? onPressed}) {
+    return SizedBox(
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE11D48), width: 2), // 紅色邊
+          boxShadow: const [BoxShadow(color: Color(0x14E11D48), blurRadius: 10, offset: Offset(0, 4))],
+        ),
+        child: ElevatedButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.delete_outline, color: Color(0xFFE11D48)),
+          label: Text(
+            text,
+            style: const TextStyle(color: Color(0xFFE11D48), fontWeight: FontWeight.bold),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 6, top: 2),
         child: Text(text, style: const TextStyle(color: _labelBlue, fontWeight: FontWeight.w800)),
@@ -243,77 +330,75 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
     );
   }
 
-  // 更顯眼的主按鈕（白底深藍字）
-  Widget _primaryCTA({required String text, required VoidCallback? onPressed}) {
-    return SizedBox(
-      width: double.infinity,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [BoxShadow(color: Color(0x802563EB), blurRadius: 14, offset: Offset(0, 6))],
-          border: Border.all(color: const Color(0xFF2563EB), width: 2),
-        ),
-        child: ElevatedButton.icon(
-          onPressed: onPressed,
-          icon: const Icon(Icons.save_rounded, color: Color(0xFF2563EB)),
-          label: Text(
-            text,
-            style: const TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.w800, fontSize: 16, letterSpacing: .5),
+
+
+  // 縮圖（含刪除與「封面」標籤）
+  // 取代原本的 _thumbTile
+  Widget _thumbTile(int index) {
+    final path = _imagePaths[index];
+    return SizedBox( // ← 固定尺寸，避免被擠扁
+      key: ValueKey('img_$index'),
+      width: 110,
+      height: 110,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: kIsWeb
+                  ? Image.network(
+                      path,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _thumbFallback(),
+                    )
+                  : Image.file(
+                      File(path),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _thumbFallback(),
+                    ),
+            ),
           ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          if (index == 0)
+            Positioned(
+              left: 6,
+              top: 6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                child: const Text('封面',
+                    style: TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          Positioned(
+            right: -8,
+            top: -8,
+            child: Material(
+              color: Colors.white,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => setState(() => _imagePaths.removeAt(index)),
+                child: const Padding(
+                  padding: EdgeInsets.all(3),
+                  child: Icon(Icons.close, size: 18, color: Colors.red),
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  // 縮圖（含刪除與「封面」標籤）
-  Widget _thumbTile(int index) {
-    final path = _imagePaths[index];
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: kIsWeb
-              ? Image.network(path, width: 110, height: 110, fit: BoxFit.cover)
-              : Image.file(File(path), width: 110, height: 110, fit: BoxFit.cover),
-        ),
-        if (index == 0)
-          Positioned(
-            left: 6,
-            top: 6,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-              child: const Text('封面', style: TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.w700)),
-            ),
-          ),
-        Positioned(
-          right: -8,
-          top: -8,
-          child: Material(
-            color: Colors.white,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => setState(() => _imagePaths.removeAt(index)),
-              child: const Padding(
-                padding: EdgeInsets.all(3),
-                child: Icon(Icons.close, size: 18, color: Colors.red),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+Widget _thumbFallback() => Container(
+  decoration: BoxDecoration(
+    color: const Color(0xFFF2F3F5),
+    borderRadius: BorderRadius.circular(12),
+  ),
+  child: const Icon(Icons.broken_image_outlined),
+);
+
 
   // 內嵌的分類欄位：點擊展開於下方、直向列表
   Widget _categoryField(List<String> options) {
@@ -394,146 +479,194 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
       ...{...widget.categories, '其他'}
     ];
 
+    // 2) build(...) 內回傳的整段：加入遮罩 + 修正 ReorderableWrap 的 key + 正確綁 _saveMemory
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: _brandGradient,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 18, offset: Offset(0, 12))],
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 標題（白色）＋關閉
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      children: [
-                        const Text(
-                          '編輯回憶',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () => Navigator.of(context).pop(false),
-                          splashRadius: 20,
-                        ),
+        child: Stack(
+          children: [
+            // 內容：儲存中不可互動
+            AbsorbPointer(
+              absorbing: _isSaving,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: _brandGradient,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 18, offset: Offset(0, 12))
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // 表單（白底欄位＋左上角深藍標籤）
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _label('回憶標題'),
-                        TextField(
-                          controller: _title,
-                          decoration: _whiteFieldDeco(hint: '給這段回憶取個名字'),
-                        ),
-                        const SizedBox(height: 12),
-
-                        _label('回憶描述'),
-                        TextField(
-                          controller: _desc,
-                          maxLines: 4,
-                          decoration: _whiteFieldDeco(hint: '想記下的細節、感受…'),
-                        ),
-                        const SizedBox(height: 12),
-
-                        _categoryField(categoryOptions),
-                        const SizedBox(height: 16),
-
-                        if (_imagePaths.isNotEmpty)
-                          ReorderableWrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            needsLongPressDraggable: true,
-                            onReorder: (oldIndex, newIndex) {
-                              setState(() {
-                                final item = _imagePaths.removeAt(oldIndex);
-                                _imagePaths.insert(newIndex, item);
-                              });
-                            },
-                            children: List.generate(_imagePaths.length, (i) => _thumbTile(i)),
+                        // 標題（白色）＋關閉
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Row(
+                            children: [
+                              const Text(
+                                '編輯回憶',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white),
+                                onPressed: () => Navigator.of(context).pop(false),
+                                splashRadius: 20,
+                              ),
+                            ],
                           ),
-                        if (_imagePaths.isNotEmpty) const SizedBox(height: 10),
-
-                        _pillButton(
-                          text: '新增圖片',
-                          icon: Icons.add_photo_alternate,
-                          onPressed: _pickImages,
                         ),
+                        const SizedBox(height: 8),
 
-                        const SizedBox(height: 16),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _pillButton(
-                                text: _isRecording ? '停止錄音' : '開始錄音',
-                                icon: _isRecording ? Icons.stop : Icons.mic,
-                                onPressed: _isRecording ? _stopRec : _startRec,
-                                fg: _isRecording ? Colors.white : _brandBlue,
-                                bg: _isRecording ? Colors.redAccent : Colors.white,
+                        // 表單（白底欄位＋左上角深藍標籤）
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _label('回憶標題'),
+                              TextField(
+                                controller: _title,
+                                style: const TextStyle(color: Colors.black87),
+                                decoration: _whiteFieldDeco(hint: '給這段回憶取個名字'),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _pillButton(
-                                text: '播放錄音',
-                                icon: Icons.play_arrow,
-                                onPressed: _recordedPath == null ? null : _playRecording,
-                                fg: _recordedPath == null ? Colors.black38 : _brandBlue,
-                                bg: Colors.white,
+                              const SizedBox(height: 12),
+
+                              _label('回憶描述'),
+                              TextField(
+                                controller: _desc,
+                                maxLines: 4,
+                                style: const TextStyle(color: Colors.black87),
+                                decoration: _whiteFieldDeco(hint: '想記下的細節、感受…'),
                               ),
-                            ),
-                          ],
-                        ),
+                              const SizedBox(height: 12),
 
-                        const SizedBox(height: 22),
+                              _categoryField(categoryOptions),
+                              const SizedBox(height: 16),
 
-                        _primaryCTA(
-                          text: _isSaving ? '儲存中…' : '儲存變更',
-                          onPressed: _isSaving ? null : _save,
-                        ),
+                              // 圖片：可拖曳排序；第一張顯示「封面」
+                              if (_imagePaths.isNotEmpty)
+                                ReorderableWrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  needsLongPressDraggable: true,
+                                  onReorder: (oldIndex, newIndex) {
+                                    setState(() {
+                                      final item = _imagePaths.removeAt(oldIndex);
+                                      _imagePaths.insert(newIndex, item);
+                                    });
+                                  },
+                                  // **要有 Key 才能穩定拖曳**
+                                  children: List.generate(
+                                    _imagePaths.length,
+                                    (i) => Container(
+                                      key: ValueKey(_imagePaths[i]),
+                                      child: _thumbTile(i),
+                                    ),
+                                  ),
+                                ),
+                              if (_imagePaths.isNotEmpty) const SizedBox(height: 10),
 
-                        const SizedBox(height: 14),
+                              _pillButton(
+                                text: '新增圖片',
+                                icon: Icons.add_photo_alternate,
+                                onPressed: _pickImages,
+                              ),
 
-                        // 刪除
-                        TextButton.icon(
-                          onPressed: _confirmDelete,
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          label: const Text('刪除回憶', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                          style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                              const SizedBox(height: 16),
+
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _pillButton(
+                                      text: _isRecording ? '停止錄音' : '開始錄音',
+                                      icon: _isRecording ? Icons.stop : Icons.mic,
+                                      onPressed: _isRecording ? _stopRec : _startRec,
+                                      fg: _isRecording ? Colors.white : _brandBlue,
+                                      bg: _isRecording ? Colors.redAccent : Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _pillButton(
+                                      text: '播放錄音',
+                                      icon: Icons.play_arrow,
+                                      onPressed: _recordedPath == null ? null : _playRecording,
+                                      fg: _recordedPath == null ? Colors.black38 : _brandBlue,
+                                      bg: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 22),
+
+                              _primaryCTA(
+                                text: _isSaving ? '儲存中…' : '儲存變更',
+                                icon: Icons.save_rounded,                   // 可留可不留
+                                onPressed: _isSaving ? null : _saveMemory,
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              // 刪除（白底邊框紅字）
+                              _dangerCTA(text: '刪除回憶', onPressed: _confirmDelete),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+
+            // 儲存中覆蓋層（居中 Loading）
+            if (_isSaving)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black45,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          ),
+                          SizedBox(width: 12),
+                          Text('儲存中…請勿關閉', style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
+
   }
 }
