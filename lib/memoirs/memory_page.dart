@@ -87,19 +87,17 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _navigateToAddMemory() async {
-    final result = await Navigator.push(
+    final ok = await showAddMemoryDialog(
       context,
-      MaterialPageRoute(
-        builder: (context) => AddMemoryPage(
-          categories: _categories,
-          targetUid: _uid,
-        ),
-      ),
+      categories: _categories, // 我會自動把「其他」補進去
+      targetUid: _uid,
     );
-    if (result != null) _loadMemories();
+    if (ok == true) _loadMemories();
   }
 
-  @override
+
+
+@override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFE3F2FD),
@@ -152,96 +150,91 @@ class _MemoryPageState extends State<MemoryPage> {
           final memoriesInCategory = _memories.where((m) => m.category == category).toList();
           if (memoriesInCategory.isEmpty) return const SizedBox();
           final isCollapsed = _collapsedCategories.contains(category);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isCollapsed) {
-                        _collapsedCategories.remove(category);
-                      } else {
-                        _collapsedCategories.add(category);
-                      }
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isCollapsed ? Icons.expand_more : Icons.expand_less,
-                          color: const Color(0xFF5B8EFF),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    if (isCollapsed) {
+                      _collapsedCategories.remove(category);
+                    } else {
+                      _collapsedCategories.add(category);
+                    }
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isCollapsed ? Icons.expand_more : Icons.expand_less,
+                        color: const Color(0xFF5B8EFF),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        category,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF5B8EFF),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          category,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF5B8EFF),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                if (!isCollapsed)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 0),
-                    child: GridView.count(
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.85,
-                      children: memoriesInCategory.map((memory) {
-                        return GestureDetector(
-                          onTap: () => _showMemoryDetail(memory),
-                          child: Column(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: memory.imagePaths.isNotEmpty
-                                    ? Image.network(
-                                  memory.imagePaths.first,
-                                  width: double.infinity,
-                                  height: 120,
-                                  fit: BoxFit.cover,
-                                )
-                                    : Container(
-                                  width: double.infinity,
-                                  height: 120,
-                                  color: Colors.grey[300],
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                memory.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Color(0xFF097988),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                memory.date.toString().substring(0, 16),
-                                style: const TextStyle(fontSize: 13, color: Colors.black54),
-                              ),
-                            ],
+              ),
+              if (!isCollapsed)
+                GridView.count(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  physics: const NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.85,
+                  children: memoriesInCategory.map((memory) {
+                    return GestureDetector(
+                      onTap: () => _showMemoryDetail(memory),
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: memory.imagePaths.isNotEmpty
+                                ? Image.network(
+                                    memory.imagePaths.first,
+                                    width: double.infinity,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Container(
+                                    width: double.infinity,
+                                    height: 120,
+                                    color: Colors.grey[300],
+                                  ),
                           ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-              ],
-            ),
+                          const SizedBox(height: 6),
+                          Text(
+                            memory.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: Color(0xFF097988),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            memory.date.toString().substring(0, 16),
+                            style: const TextStyle(fontSize: 13, color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
           );
         }).toList(),
       ),
@@ -304,15 +297,15 @@ class _MemoryPageState extends State<MemoryPage> {
                           ),
                           child: memory.imagePaths.isNotEmpty
                               ? Image.network(
-                            memory.imagePaths.first,
-                            fit: BoxFit.contain,
-                            width: double.infinity,
-                          )
+                                  memory.imagePaths.first,
+                                  fit: BoxFit.contain,
+                                  width: double.infinity,
+                                )
                               : Container(
-                            height: 100,
-                            width: double.infinity,
-                            color: const Color.fromARGB(255, 9, 87, 135),
-                          ),
+                                  height: 100,
+                                  width: double.infinity,
+                                  color: const Color.fromARGB(255, 9, 87, 135),
+                                ),
                         ),
 
                         const SizedBox(height: 1),
@@ -402,22 +395,17 @@ class _MemoryPageState extends State<MemoryPage> {
                     right: 20,
                     child: ElevatedButton.icon(
                       onPressed: () async {
-                        final result = await Navigator.push(
+                        final ok = await showEditMemoryDialog(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => EditMemoryPage(
-                              docId: memory.id,
-                              title: memory.title,
-                              description: memory.description,
-                              imagePaths: memory.imagePaths,
-                              audioPath: memory.audioPath,
-                              category: memory.category,
-                              categories: _categories,
-                            ),
-                          ),
+                          docId: memory.id,
+                          title: memory.title,
+                          description: memory.description,
+                          imagePaths: memory.imagePaths,
+                          audioPath: memory.audioPath,
+                          category: memory.category,
+                          categories: _categories,
                         );
-                        if (result != null) _loadMemories();
-                        if (context.mounted) Navigator.of(context).pop();
+                        if (ok == true) _loadMemories();
                       },
                       icon: const Icon(Icons.edit),
                       label: const Text('編輯回憶'),
