@@ -5,6 +5,8 @@ import 'category_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'edit_memory_page.dart';
+import 'dart:async';
+
 
 class Memory {
   final String id;
@@ -126,7 +128,8 @@ class _MemoryPageState extends State<MemoryPage> {
   List<String> _categories = ['人物', '旅遊'];
   final Set<String> _collapsedCategories = {};
   String? _uid;
-
+  String _searchQuery = '';
+  Timer? _searchDebounce;
 
 
   @override
@@ -148,6 +151,8 @@ class _MemoryPageState extends State<MemoryPage> {
         .map((doc) => Memory.fromFirestore(doc.id, doc.data()))
         .toList();
 
+    if (!mounted) return;
+
     setState(() {
       _memories
         ..clear()
@@ -161,6 +166,7 @@ class _MemoryPageState extends State<MemoryPage> {
       categories: _categories, // 我會自動把「其他」補進去
       targetUid: _uid,
     );
+    if (!mounted) return;
     if (ok == true) _loadMemories();
   }
 
@@ -185,6 +191,40 @@ class _MemoryPageState extends State<MemoryPage> {
           ),
         ),
         actions: [
+          // 搜尋框
+          SizedBox(
+            width: 180,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: TextField(
+                onChanged: (value) {
+                  // 🔔 debounce：每次輸入先取消上一個計時器
+                  _searchDebounce?.cancel();
+                  _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                    if (!mounted) return; // 頁面關掉就不要 setState
+                    setState(() => _searchQuery = value.trim().toLowerCase());
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: '搜尋回憶…',
+                  hintStyle: const TextStyle(color: Colors.white70, fontSize: 14),
+                  prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 20),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: .2),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // 分類按鈕
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: ElevatedButton.icon(
@@ -196,6 +236,7 @@ class _MemoryPageState extends State<MemoryPage> {
                 builder: (_) => CategoryManager(
                   initialCategories: _categories,
                   onCategoriesUpdated: (newCats) {
+                    if (!mounted) return;
                     setState(() => _categories = newCats);
                   },
                 ),
@@ -210,13 +251,19 @@ class _MemoryPageState extends State<MemoryPage> {
                 ),
               ),
             ),
-          )
+          ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
         children: _categories.map((category) {
-          final memoriesInCategory = _memories.where((m) => m.category == category).toList();
+          final memoriesInCategory = _memories
+              .where((m) => m.category == category)
+              .where((m) =>
+          _searchQuery.isEmpty ||
+              m.title.toLowerCase().contains(_searchQuery) ||
+              m.description.toLowerCase().contains(_searchQuery))
+              .toList();
           if (memoriesInCategory.isEmpty) return const SizedBox();
           final isCollapsed = _collapsedCategories.contains(category);
           return Column(
@@ -494,6 +541,7 @@ class _MemoryPageState extends State<MemoryPage> {
   @override
   void dispose() {
     _audioPlayer.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 }
