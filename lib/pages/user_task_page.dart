@@ -116,7 +116,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
         'docId': doc.id,
       });
     }
-
+    if (!mounted) return;
     // 填回你的 taskMap 並更新畫面
     setState(() {
       taskMap = loadedTaskMap;
@@ -142,11 +142,13 @@ class _UserTaskPageState extends State<UserTaskPage> {
     if (!_isListening) {
       bool available = await _speech.initialize();
       if (available) {
+        if (!mounted) return;
         setState(() => _isListening = true);
         _speech.listen(onResult: (result) async {
           try {
             if (result.finalResult && result.recognizedWords.isNotEmpty) {
               _speech.stop();
+              if (!mounted) return;
               setState(() => _isListening = false);
 
 
@@ -187,12 +189,14 @@ class _UserTaskPageState extends State<UserTaskPage> {
             }
           } catch (e) {
             debugPrint("⚠️ 語音處理錯誤：$e");
+            if (!mounted) return;
             setState(() => _isListening = false);
           }
         });
       }
     } else {
       _speech.stop();
+      if (!mounted) return;
       setState(() => _isListening = false);
     }
   }
@@ -335,6 +339,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
 
       final dateKey = result['date'] ?? DateFormat('yyyy-MM-dd').format(selectedDate);
       final type = result['type'] ?? '提醒'; // 如果沒傳回 type，預設為「提醒」
+      if (!mounted) return;
 
       // ✅ 把任務加進 taskMap
       setState(() {
@@ -387,7 +392,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
     if (docId != null) {
       await deleteTaskFromFirebase(docId); // ⬅️ 刪 Firebase 上的資料
     }
-
+    if (!mounted) return;
     setState(() {
       taskMap[key]!.removeAt(index); // ⬅️ 同時從本地移除
     });
@@ -395,6 +400,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
 
 
   void _jumpToToday() {
+    if (!mounted) return;
     setState(() {
       selectedDate = DateTime.now();
     });
@@ -439,6 +445,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
         builder: (_) => MonthlyOverviewPage(
           taskMap: taskMap,
           onSelectDate: (DateTime selected) {
+            if (!mounted) return;
             setState(() {
               selectedDate = selected;
             });
@@ -449,6 +456,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
   }
 
   void _toggleTaskCompletion(Map<String, String> task, bool isCompleted) async {
+    if (!mounted) return;
     setState(() {
       task['completed'] = isCompleted.toString();
     });
