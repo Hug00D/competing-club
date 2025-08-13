@@ -584,6 +584,16 @@ class _UserTaskPageState extends State<UserTaskPage> {
     );
   }
 
+  void _shiftDay(int delta) {
+    if (!mounted) return; // 保險：頁面已關閉就不要更新
+    setState(() {
+      selectedDate = selectedDate.add(Duration(days: delta));
+    });
+
+    // 若你會在換日後去抓資料，記得在該 async 方法裡也加 mounted 檢查
+    // _loadTasksFor(selectedDate);
+  }
+
   @override
   Widget build(BuildContext context) {
     final key = DateFormat('yyyy-MM-dd').format(selectedDate);
@@ -811,7 +821,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
                 IconButton(
                   iconSize: 40,
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87),
-                  onPressed: () => setState(() => selectedDate = selectedDate.subtract(const Duration(days: 1))),
+                  onPressed: () => _shiftDay(-1),
                 ),
                 const Text('上', style: TextStyle(fontSize: 16, color: Colors.black54)),
               ],
@@ -824,7 +834,7 @@ class _UserTaskPageState extends State<UserTaskPage> {
                 IconButton(
                   iconSize: 40,
                   icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.black87),
-                  onPressed: () => setState(() => selectedDate = selectedDate.add(const Duration(days: 1))),
+                  onPressed: () => _shiftDay(1),
                 ),
                 const Text('下', style: TextStyle(fontSize: 16, color: Colors.black54)),
               ],
@@ -887,6 +897,7 @@ class _TaskDialogState extends State<TaskDialog> {
       final selected = DateTime(
           now.year, now.month, now.day, picked.hour, picked.minute);
       final formatted = DateFormat('HH:mm').format(selected);
+      if (!mounted) return;
       setState(() {
         if (isStart) {
           startTime = formatted;
@@ -905,6 +916,7 @@ class _TaskDialogState extends State<TaskDialog> {
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (picked != null) {
+      if (!mounted) return;
       setState(() => taskDate = picked);
     }
   }
@@ -989,6 +1001,7 @@ class _TaskDialogState extends State<TaskDialog> {
                   );
                 }).toList(),
                 onChanged: (value) {
+                  if (!mounted) return;
                   setState(() {
                     taskType = value;
                   });
@@ -1023,6 +1036,7 @@ class _TaskDialogState extends State<TaskDialog> {
                         }
 
                         await FlutterTts().speak("已幫你新增 $task，從 $finalStart 到 $finalEnd");
+                        if (!mounted) return;
 
                         setState(() {
                           _controller.text = task;
