@@ -1,5 +1,3 @@
-// memory_page.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'add_memory_page.dart';
@@ -53,12 +51,83 @@ class MemoryPage extends StatefulWidget {
   State<MemoryPage> createState() => _MemoryPageState();
 }
 
+// 2) 新增這個小元件到同一個檔案（class 之外也可）
+class _GradientPillButton extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _GradientPillButton({
+    required this.text,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 藍→綠的柔和漸層，和頁面風格一致
+    const c1 = Color(0xFF2563EB); // 藍
+    const c2 = Color(0xFF2CEAA3); // 綠
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [c1, c2],
+        ),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          // 柔和陰影，與頁面卡片一致
+          BoxShadow(
+            color: c1.withValues(alpha: .25),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(30),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(30),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(width: 4),
+                const Icon(Icons.edit_rounded, color: Colors.white),
+                const SizedBox(width: 8),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    letterSpacing: .5,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
 class _MemoryPageState extends State<MemoryPage> {
   final List<Memory> _memories = [];
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<String> _categories = ['人物', '旅遊'];
   final Set<String> _collapsedCategories = {};
   String? _uid;
+
+
 
   @override
   void initState() {
@@ -95,9 +164,29 @@ class _MemoryPageState extends State<MemoryPage> {
     if (ok == true) _loadMemories();
   }
 
+  static const _frameBlue = Color(0xFF2563EB);
+  Widget _framed(Widget child) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _frameBlue, width: 2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x802563EB), // 藍色柔光暈
+            blurRadius: 14,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: child,
+      ),
+    );
+  }
 
-
-@override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFE3F2FD),
@@ -202,16 +291,16 @@ class _MemoryPageState extends State<MemoryPage> {
                             borderRadius: BorderRadius.circular(16),
                             child: memory.imagePaths.isNotEmpty
                                 ? Image.network(
-                                    memory.imagePaths.first,
-                                    width: double.infinity,
-                                    height: 120,
-                                    fit: BoxFit.cover,
-                                  )
+                              memory.imagePaths.first,
+                              width: double.infinity,
+                              height: 120,
+                              fit: BoxFit.cover,
+                            )
                                 : Container(
-                                    width: double.infinity,
-                                    height: 120,
-                                    color: Colors.grey[300],
-                                  ),
+                              width: double.infinity,
+                              height: 120,
+                              color: Colors.grey[300],
+                            ),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -264,168 +353,239 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  void _showMemoryDetail(Memory memory) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.85,
-          maxChildSize: 0.9,
-          minChildSize: 0.5,
-          expand: false,
-          builder: (context, scrollController) {
-            return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Stack(
-                children: [
-                  SingleChildScrollView(
-                    controller: scrollController,
-                    padding: const EdgeInsets.only(bottom: 100),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 📷 首圖
-                        ClipRRect(
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
+void _showMemoryDetail(Memory memory) {
+  // 共用外框：白底 + 藍色描邊 + 柔和陰影
+  Widget framed(Widget child) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF2563EB), width: 2),
+        boxShadow: const [
+          BoxShadow(color: Color(0x802563EB), blurRadius: 14, offset: Offset(0, 6)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: child,
+      ),
+    );
+  }
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) {
+          const double editBarHeight = 56;
+          const double fabSize = 56;
+          const double gap = 24;
+          final double bottomSafe = MediaQuery.of(context).padding.bottom;
+          final double padBottomForScroll = editBarHeight + fabSize + gap + bottomSafe;
+
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Stack(
+              children: [
+                // 內容
+                SingleChildScrollView(
+                  controller: scrollController,
+                  padding: EdgeInsets.only(bottom: padBottomForScroll),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 📷 首圖（左下角顯示標題）
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                        child: framed(
+                          SizedBox(
+                            width: double.infinity,
+                            child: Stack(
+                              children: [
+                                // 圖片
+                                memory.imagePaths.isNotEmpty
+                                    ? Image.network(
+                                        memory.imagePaths.first,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            Container(height: 160, color: Colors.grey[300]),
+                                      )
+                                    : Container(height: 160, color: Colors.grey[200]),
+                                // 底部漸層，讓白字更清楚
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: IgnorePointer(
+                                    child: Container(
+                                      height: 84,
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [Colors.transparent, Colors.black54],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // 左下角標題
+                                if ((memory.title).isNotEmpty)
+                                  Positioned(
+                                    left: 12,
+                                    right: 12,
+                                    bottom: 10,
+                                    child: Text(
+                                      memory.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                        shadows: [
+                                          Shadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 2)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                          child: memory.imagePaths.isNotEmpty
-                              ? Image.network(
-                                  memory.imagePaths.first,
-                                  fit: BoxFit.contain,
-                                  width: double.infinity,
-                                )
-                              : Container(
-                                  height: 100,
-                                  width: double.infinity,
-                                  color: const Color.fromARGB(255, 9, 87, 135),
-                                ),
                         ),
+                      ),
 
-                        const SizedBox(height: 1),
+                      // 與圖片拉開距離
+                      const SizedBox(height: 20),
 
-                        // 📝 描述區塊
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '描述',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF5B8EFF),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                memory.description,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ],
+                      // 📝 描述（標題在卡片外）
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          '描述',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2563EB),
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
 
-                        const SizedBox(height: 20),
-
-                        // 其餘圖片
-                        ...memory.imagePaths.skip(1).map((path) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                path,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                errorBuilder: (_, __, ___) => Container(
-                                  height: 150,
-                                  color: Colors.grey[300],
+                      // 固定高度、內部可滾動
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: framed(
+                          SizedBox(
+                            height: 160,
+                            width: double.infinity,
+                            child: Scrollbar(
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(16),
+                                child: Text(
+                                  memory.description,
+                                  style: const TextStyle(fontSize: 16, color: Colors.black87),
                                 ),
                               ),
                             ),
-                          );
-                        }),
-
-                        const SizedBox(height: 100),
-                      ],
-                    ),
-                  ),
-
-                  // 🔊 播放按鈕
-                  Positioned(
-                    bottom: 80,
-                    right: 20,
-                    child: FloatingActionButton(
-                      backgroundColor: const Color(0xFF5B8EFF),
-                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 32),
-                      onPressed: () async {
-                        try {
-                          if (memory.audioPath.startsWith('http')) {
-                            await _audioPlayer.setUrl(memory.audioPath);
-                          } else {
-                            await _audioPlayer.setFilePath(memory.audioPath);
-                          }
-                          await _audioPlayer.play();
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('無法播放語音')),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  ),
-
-                  // ✏️ 編輯按鈕
-                  Positioned(
-                    bottom: 20,
-                    left: 20,
-                    right: 20,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final ok = await showEditMemoryDialog(
-                          context,
-                          docId: memory.id,
-                          title: memory.title,
-                          description: memory.description,
-                          imagePaths: memory.imagePaths,
-                          audioPath: memory.audioPath,
-                          category: memory.category,
-                          categories: _categories,
-                        );
-                        if (ok == true) _loadMemories();
-                      },
-                      icon: const Icon(Icons.edit),
-                      label: const Text('編輯回憶'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+                          ),
                         ),
                       ),
-                    ),
+
+                      const SizedBox(height: 16),
+
+                      // 其餘圖片（同樣加外框）
+                      ...memory.imagePaths.skip(1).map((path) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          child: framed(
+                            Image.network(
+                              path,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (_, __, ___) => Container(height: 150, color: Colors.grey[300]),
+                            ),
+                          ),
+                        );
+                      }),
+
+                      const SizedBox(height: 24),
+                    ],
                   ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+                ),
+
+                // 🔊 播放按鈕（避開底部編輯膠囊）
+                Positioned(
+                  right: 20,
+                  bottom: bottomSafe + editBarHeight + gap,
+                  child: FloatingActionButton(
+                    backgroundColor: const Color(0xFF5B8EFF),
+                    child: const Icon(Icons.play_arrow, color: Colors.white, size: 32),
+                    onPressed: () async {
+                      try {
+                        if (memory.audioPath.startsWith('http')) {
+                          await _audioPlayer.setUrl(memory.audioPath);
+                        } else {
+                          await _audioPlayer.setFilePath(memory.audioPath);
+                        }
+                        await _audioPlayer.play();
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('無法播放語音')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+
+                // ✏️ 編輯按鈕（底部膠囊）
+                Positioned(
+                  bottom: 20 + bottomSafe,
+                  left: 16,
+                  right: 16,
+                  child: _GradientPillButton(
+                    text: '編輯回憶',
+                    icon: Icons.edit_rounded,
+                    onPressed: () async {
+                      final ok = await showEditMemoryDialog(
+                        context,
+                        docId: memory.id,
+                        title: memory.title,
+                        description: memory.description,
+                        imagePaths: memory.imagePaths,
+                        audioPath: memory.audioPath,
+                        category: memory.category,
+                        categories: _categories,
+                      );
+                      if (!mounted) return;
+                      if (ok == true) _loadMemories();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+
+
 
 
   @override
