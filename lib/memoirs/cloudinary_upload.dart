@@ -5,7 +5,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart'; // ⬅️ 需要加入 mime 套件：mime: ^1.0.4
 
 Future<String?> uploadFileToCloudinary(File file, {required bool isImage}) async {
-  const cloudName = 'dftre2xh6';
+  const cloudName = 'dux2hhtb5';
   const uploadPreset = 'memoirs';
   final resourceType = isImage ? 'image' : 'video'; // Cloudinary 對音訊用 video 上傳
 

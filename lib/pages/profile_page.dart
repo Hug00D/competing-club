@@ -207,7 +207,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
 
   Future<String?> uploadBytesToCloudinary(Uint8List bytes, String fileName) async {
-    const cloudName = 'dftre2xh6';
+    const cloudName = 'dux2hhtb5';
     const uploadPreset = 'memoirs';
 
     final request = http.MultipartRequest(
@@ -231,7 +231,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   /// ✅ 上傳檔案到 Cloudinary
   Future<String?> uploadFileToCloudinary(File file, {required bool isImage}) async {
-    const cloudName = 'dftre2xh6';
+    const cloudName = 'dux2hhtb5';
     const uploadPreset = 'memoirs';
     final resourceType = isImage ? 'image' : 'video';
 

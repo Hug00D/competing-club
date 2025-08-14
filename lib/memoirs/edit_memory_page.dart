@@ -10,15 +10,15 @@ import 'memory_platform.dart';
 import 'cloudinary_upload.dart';
 
 Future<bool?> showEditMemoryDialog(
-  BuildContext context, {
-  required String docId,
-  required String title,
-  required String description,
-  required List<String> imagePaths,
-  required String audioPath,
-  required String category,
-  required List<String> categories,
-}) {
+    BuildContext context, {
+      required String docId,
+      required String title,
+      required String description,
+      required List<String> imagePaths,
+      required String audioPath,
+      required String category,
+      required List<String> categories,
+    }) {
   return showGeneralDialog<bool>(
     context: context,
     barrierLabel: 'EditMemory',
@@ -92,10 +92,10 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
   static const Color _brandMint = Color(0xFF49E3D4);
   static const Color _labelBlue = Color(0xFF0B5ED7); // 深藍標籤色
   LinearGradient get _brandGradient => const LinearGradient(
-        colors: [_brandBlue, _brandMint],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
+    colors: [_brandBlue, _brandMint],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   @override
   void initState() {
@@ -223,42 +223,42 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
 
 
   Widget _primaryCTA({
-  required String text,
-  VoidCallback? onPressed,
-  IconData icon = Icons.save_rounded,   // ← 新增：可選參數＋預設值
-}) {
-  return SizedBox(
-    width: double.infinity,
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Color(0x802563EB), blurRadius: 14, offset: Offset(0, 6))],
-        border: Border.all(color: Color(0xFF2563EB), width: 2),
-      ),
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, color: const Color(0xFF2563EB)),   // ← 用呼叫方傳進來的 icon
-        label: Text(
-          text,
-          style: const TextStyle(
-            color: Color(0xFF1E40AF),
-            fontWeight: FontWeight.w800,
-            fontSize: 16,
-            letterSpacing: .5,
+    required String text,
+    VoidCallback? onPressed,
+    IconData icon = Icons.save_rounded,   // ← 新增：可選參數＋預設值
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [BoxShadow(color: Color(0x802563EB), blurRadius: 14, offset: Offset(0, 6))],
+          border: Border.all(color: Color(0xFF2563EB), width: 2),
+        ),
+        child: ElevatedButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, color: const Color(0xFF2563EB)),   // ← 用呼叫方傳進來的 icon
+          label: Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF1E40AF),
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+              letterSpacing: .5,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // 新增：白底紅邊的危險樣式按鈕
   Widget _dangerCTA({required String text, required VoidCallback? onPressed}) {
@@ -291,18 +291,18 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
   }
 
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 6, top: 2),
-        child: Text(text, style: const TextStyle(color: _labelBlue, fontWeight: FontWeight.w800)),
-      );
+    padding: const EdgeInsets.only(left: 4, bottom: 6, top: 2),
+    child: Text(text, style: const TextStyle(color: _labelBlue, fontWeight: FontWeight.w800)),
+  );
 
   InputDecoration _whiteFieldDeco({String? hint}) => InputDecoration(
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.black38),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-      );
+    hintText: hint,
+    hintStyle: const TextStyle(color: Colors.black38),
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+  );
 
   Widget _pillButton({
     required String text,
@@ -324,7 +324,7 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         side: BorderSide(
-          color: (_isRecording && icon == Icons.mic) ? Colors.redAccent : _brandBlue.withOpacity(.25),
+          color: (_isRecording && icon == Icons.mic) ? Colors.redAccent : _brandBlue.withValues(alpha: .25),
         ),
       ),
     );
@@ -348,15 +348,15 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
               borderRadius: BorderRadius.circular(12),
               child: kIsWeb
                   ? Image.network(
-                      path,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _thumbFallback(),
-                    )
+                path,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _thumbFallback(),
+              )
                   : Image.file(
-                      File(path),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _thumbFallback(),
-                    ),
+                File(path),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _thumbFallback(),
+              ),
             ),
           ),
           if (index == 0)
@@ -391,13 +391,13 @@ class _EditMemoryDialogState extends State<EditMemoryDialog> {
     );
   }
 
-Widget _thumbFallback() => Container(
-  decoration: BoxDecoration(
-    color: const Color(0xFFF2F3F5),
-    borderRadius: BorderRadius.circular(12),
-  ),
-  child: const Icon(Icons.broken_image_outlined),
-);
+  Widget _thumbFallback() => Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFFF2F3F5),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: const Icon(Icons.broken_image_outlined),
+  );
 
 
   // 內嵌的分類欄位：點擊展開於下方、直向列表
@@ -442,31 +442,31 @@ Widget _thumbFallback() => Container(
           child: !_catOpen
               ? const SizedBox.shrink()
               : Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 3))],
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    itemCount: options.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE8E8E8)),
-                    itemBuilder: (_, i) {
-                      final c = options[i];
-                      return ListTile(
-                        dense: true,
-                        title: Text(c, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
-                        onTap: () => setState(() {
-                          _selectedCategory = c;
-                          _catOpen = false;
-                        }),
-                      );
-                    },
-                  ),
-                ),
+            margin: const EdgeInsets.only(top: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 3))],
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              itemCount: options.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE8E8E8)),
+              itemBuilder: (_, i) {
+                final c = options[i];
+                return ListTile(
+                  dense: true,
+                  title: Text(c, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+                  onTap: () => setState(() {
+                    _selectedCategory = c;
+                    _catOpen = false;
+                  }),
+                );
+              },
+            ),
+          ),
         ),
       ],
     );
@@ -572,7 +572,7 @@ Widget _thumbFallback() => Container(
                                   // **要有 Key 才能穩定拖曳**
                                   children: List.generate(
                                     _imagePaths.length,
-                                    (i) => Container(
+                                        (i) => Container(
                                       key: ValueKey(_imagePaths[i]),
                                       child: _thumbTile(i),
                                     ),

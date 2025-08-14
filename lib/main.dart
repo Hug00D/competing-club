@@ -19,7 +19,7 @@ import 'caregivers/map.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.init();
-  await NotificationService.requestExactAlarmPermission();
+  await NotificationService.openExactAlarmSettings();
   await Firebase.initializeApp(
 
     options: DefaultFirebaseOptions.currentPlatform,

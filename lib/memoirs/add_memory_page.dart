@@ -10,10 +10,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:reorderables/reorderables.dart'; // ← 拖曳排序
 
 Future<bool?> showAddMemoryDialog(
-  BuildContext context, {
-  required List<String> categories,
-  String? targetUid,
-}) {
+    BuildContext context, {
+      required List<String> categories,
+      String? targetUid,
+    }) {
   return showGeneralDialog<bool>(
     context: context,
     barrierLabel: 'AddMemory',
@@ -67,12 +67,12 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
   static const Color _brandBlue  = Color(0xFF5B8EFF);
   static const Color _labelBlue = Color(0xFF1E40AF); // 深藍：標籤用
   static const Color _brandMint  = Color(0xFF49E3D4);
-  static const Color _fieldBlue  = Color(0xFF2A5FD3); // 比背景更深的藍色
+  //static const Color _fieldBlue  = Color(0xFF2A5FD3); // 比背景更深的藍色
   LinearGradient get _brandGradient => const LinearGradient(
-        colors: [_brandBlue, _brandMint],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      );
+    colors: [_brandBlue, _brandMint],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   @override
   void initState() {
@@ -179,24 +179,6 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
     ),
   );
 
-  InputDecoration _whiteFieldDeco(String label, {String? hint}) => InputDecoration(
-    labelText: label,                                // 固定在左上
-    floatingLabelBehavior: FloatingLabelBehavior.always,
-    alignLabelWithHint: true,
-    labelStyle: const TextStyle(
-      color: _labelBlue,                             // ← 深藍標籤
-      fontWeight: FontWeight.w700,
-    ),
-    hintText: hint,
-    hintStyle: const TextStyle(color: Colors.black45),
-    filled: true,
-    fillColor: Colors.white,                         // ← 白底
-    contentPadding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(16),
-      borderSide: BorderSide.none,
-    ),
-  );
   Widget _pillButton({
     required String text,
     required IconData icon,
@@ -219,7 +201,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
         side: BorderSide(
           color: (_isRecording && icon == Icons.mic)
               ? Colors.redAccent
-              : _brandBlue.withOpacity(.25),
+              : _brandBlue.withValues(alpha: .25)
         ),
       ),
     );
@@ -334,7 +316,7 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: placeholder ? _labelBlue.withOpacity(.65) : Colors.black, // ← 深藍 placeholder、選後黑字
+                      color: placeholder ? _labelBlue.withValues(alpha: .65) : Colors.black, // ← 深藍 placeholder、選後黑字
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -351,28 +333,28 @@ class _AddMemoryDialogState extends State<AddMemoryDialog> {
           child: !_catOpen
               ? const SizedBox.shrink()
               : Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 3))],
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    itemCount: options.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE8E8E8)),
-                    itemBuilder: (_, i) {
-                      final c = options[i];
-                      return ListTile(
-                        dense: true,
-                        title: Text(c, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
-                        onTap: () => setState(() { _selectedCategory = c; _catOpen = false; }),
-                      );
-                    },
-                  ),
-                ),
+            margin: const EdgeInsets.only(top: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 3))],
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              itemCount: options.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE8E8E8)),
+              itemBuilder: (_, i) {
+                final c = options[i];
+                return ListTile(
+                  dense: true,
+                  title: Text(c, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600)),
+                  onTap: () => setState(() { _selectedCategory = c; _catOpen = false; }),
+                );
+              },
+            ),
+          ),
         ),
       ],
     );

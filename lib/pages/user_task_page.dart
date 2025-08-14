@@ -370,11 +370,11 @@ class _UserTaskPageState extends State<UserTaskPage> {
         final int notificationId = scheduledTime.hashCode;
 
         // 4️⃣ 排程通知
-        await NotificationService.scheduleExactNotification(
+        await NotificationService.scheduleExact(
           id: notificationId,
           title: '任務提醒',
           body: '$taskTitle 的時間到了！',
-          scheduledTime: scheduledTime,
+          when: scheduledTime,
         );
 
         debugPrint('✅ 已為任務 [$taskTitle] 安排通知：$scheduledTime');

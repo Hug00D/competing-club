@@ -80,16 +80,27 @@ class _MainMenuPageState extends State<MainMenuPage> {
                     _buildGradientButton(
                       context,
                       text: '10 秒後提醒',
-                      onPressed: () {
-                        NotificationService.showTestNotification();
-                        NotificationService.scheduleExactNotification(
+                      onPressed: () async {
+                        // 立刻一則，確認通知權限/頻道 OK
+                        await NotificationService.showNow(
+                          id: 999,
+                          title: '✅ 測試通知',
+                          body: '立刻跳出的通知',
+                        );
+
+                        // 10 秒後：保底排程（先 exact，必要時自動補 AlarmClock）
+                        await NotificationService.scheduleWithFallback(
                           id: 1,
                           title: '吃藥提醒',
                           body: 'Sensei 該吃藥囉！',
-                          scheduledTime: DateTime.now().add(const Duration(seconds: 10)),
+                          when: DateTime.now().add(const Duration(seconds: 180)),
                         );
+
+                        // 如要引導開啟精準鬧鐘授權（可放在「通知異常」按鈕上）
+                        // await NotificationService.openExactAlarmSettings();
                       },
                     )
+
                   ],
                 ),
               )
