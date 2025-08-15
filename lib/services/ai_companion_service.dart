@@ -38,18 +38,18 @@ class AICompanionService {
   }
 
   Future<bool> playMemoryAudioFromUrl(String url) async {
-    try {
-      await _audioPlayer.stop();
-      await _flutterTts.stop();
-      await _audioPlayer.setUrl(url);
-      await _audioPlayer.play();
-      debugPrint('▶️ 成功播放 AI 指定音檔：$url');
-      return true;
-    } catch (e) {
-      debugPrint('❌ 無法播放 AI 指定音檔：$e');
-      return false;
-    }
+  try {
+    await _audioPlayer.stop();
+    await _flutterTts.stop();
+    await _audioPlayer.setUrl(url);
+    await _audioPlayer.play();
+    debugPrint('▶️ 成功播放 AI 指定音檔：$url');
+    return true;
+  } catch (e) {
+    debugPrint('❌ 無法播放 AI 指定音檔：$e');
+    return false;
   }
+}
 
 
   /// 若有任務在一小時內，語音提醒
@@ -97,131 +97,173 @@ class AICompanionService {
     });
   }
 
-  Map<String, dynamic>? _lastPlayedMemory;
+Map<String, dynamic>? _lastPlayedMemory;
 
-  Future<bool> playMemoryAudioIfMatch(String userInput) async {
-    debugPrint('🎧 呼叫 playMemoryAudioIfMatch');
+Future<bool> playMemoryAudioIfMatch(String userInput) async {
+  debugPrint('🎧 呼叫 playMemoryAudioIfMatch');
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return false;
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return false;
 
-    final memoryService = MemoryService();
-    final memories = await memoryService.fetchMemories(uid);
-    debugPrint('📦 撈到 ${memories.length} 筆記憶');
+  final memoryService = MemoryService();
+  final memories = await memoryService.fetchMemories(uid);
+  debugPrint('📦 撈到 ${memories.length} 筆記憶');
 
-    final lowerInput = userInput.toLowerCase();
-    final keywords = userInput.split(RegExp(r'\s+'));
-    debugPrint('🔍 關鍵字：$keywords');
+  if (memories.isEmpty) return false;
 
-    // ✅ 處理「再播一次」類型
-    if (lowerInput.contains("再播") || lowerInput.contains("重播") || lowerInput.contains("再聽")) {
-      if (_lastPlayedMemory != null) {
-        final audioUrl = _lastPlayedMemory!['audioPath'];
-        if (audioUrl != null && audioUrl.isNotEmpty) {
-          debugPrint('🔁 重播上次記憶：$audioUrl');
-          return await _playAudioFromPath(audioUrl);
-        }
+  String normalize(String s) {
+    final lowered = s.toLowerCase();
+    // 去除空白與中英標點
+    final cleaned = lowered.replaceAll(RegExp(r'[\s\u3000\p{P}]+', unicode: true), '');
+    return cleaned;
+  }
+
+  bool containsAll(String haystack, String needle) {
+    if (needle.isEmpty) return false;
+    return haystack.contains(needle);
+  }
+
+  // ✅ 處理「再播一次」類型
+  final lowerInput = userInput.toLowerCase();
+  if (lowerInput.contains("再播") || lowerInput.contains("重播") || lowerInput.contains("再聽")) {
+    if (_lastPlayedMemory != null) {
+      final audioUrl = _lastPlayedMemory!['audioPath'];
+      if (audioUrl != null && audioUrl.toString().isNotEmpty) {
+        debugPrint('🔁 重播上次記憶：$audioUrl');
+        return await _playAudioFromPath(audioUrl);
       }
-      debugPrint('⚠️ 沒有可重播的記憶');
-      return false;
     }
+    debugPrint('⚠️ 沒有可重播的記憶');
+    // 繼續往下嘗試匹配
+  }
 
-    Map<String, dynamic>? matched;
+  // 🧠 若 AI 回覆中有 [播放回憶錄] 標題就先用它
+  Map<String, dynamic>? matched;
 
-    // ✅ 先檢查是否有 AI 給的 [播放回憶錄] 標題
-    final titleMatch = RegExp(r'\[播放回憶錄\].*標題[:：]\s*(.+)').firstMatch(userInput);
-    final titleFromAI = titleMatch?.group(1)?.trim();
+  final titleMatch = RegExp(r'\[播放回憶(?:錄)?\][\s\S]*?標題[:：]\s*(.+)', dotAll: true)
+      .firstMatch(userInput);
+  final titleFromAI = titleMatch?.group(1)?.trim();
+
+  String ctxRaw = userInput;
+  String ctxNorm = normalize(ctxRaw);
+
+  // 打分數
+  int scoreFor(Map<String, dynamic> mem) {
+    final title = (mem['title'] ?? '').toString();
+    final desc  = (mem['description'] ?? '').toString();
+    final audio = (mem['audioPath'] ?? '').toString();
+
+    final tRaw = title;
+    final dRaw = desc;
+    final t = normalize(tRaw);
+    final d = normalize(dRaw);
+
+    int s = 0;
+
+    // 1) AI 標題直接命中加大量分
     if (titleFromAI != null && titleFromAI.isNotEmpty) {
-      debugPrint('🧠 從 AI 傳回取得標題: $titleFromAI');
-      matched = memories.firstWhere(
-            (m) => (m['title'] ?? '').toString().contains(titleFromAI),
-        orElse: () => {},
-      );
+      final aiNorm = normalize(titleFromAI);
+      if (aiNorm.isNotEmpty && (t.contains(aiNorm) || aiNorm.contains(t))) s += 20;
+      if (tRaw.isNotEmpty && titleFromAI.contains(tRaw)) s += 20;
     }
 
-    // ✅ 若沒找到，從輸入找日期（例如 8/6）
-    if (matched == null || matched.isEmpty) {
-      final datePattern = RegExp(r'(\d{1,2})[\/\-](\d{1,2})');
-      final now = DateTime.now();
-      DateTime? targetDate;
-      final match = datePattern.firstMatch(userInput);
-      if (match != null) {
-        final month = int.tryParse(match.group(1)!);
-        final day = int.tryParse(match.group(2)!);
-        if (month != null && day != null) {
-          targetDate = DateTime(now.year, month, day);
-        }
-      }
+    // 2) 內容包含度（原始 + 正規化）
+    if (tRaw.isNotEmpty && ctxRaw.contains(tRaw)) s += 10;
+    if (t.isNotEmpty && containsAll(ctxNorm, t)) s += 6;
 
-      if (targetDate != null) {
-        debugPrint('📅 嘗試比對日期：$targetDate');
-        matched = memories.firstWhere(
-              (m) {
-            final ts = m['createdAt'];
-            if (ts is Timestamp) {
-              final memDate = ts.toDate();
-              return memDate.year == targetDate!.year &&
-                  memDate.month == targetDate.month &&
-                  memDate.day == targetDate.day;
-            } else if (ts is String) {
-              try {
-                final memDate = DateTime.parse(ts);
-                return memDate.year == targetDate!.year &&
-                    memDate.month == targetDate.month &&
-                    memDate.day == targetDate.day;
-              } catch (_) {
-                return false;
-              }
-            }
-            return false;
-          },
-          orElse: () => {},
-        );
-      }
+    if (dRaw.isNotEmpty && ctxRaw.contains(dRaw)) s += 4;
+    if (d.isNotEmpty && containsAll(ctxNorm, d)) s += 2;
+
+    // 3) 關鍵詞（取 2+ 字的 token）
+    final roughTokens = ctxRaw.split(RegExp(r'[\s、,，。.!！?？:：;；\-/]+'))
+      .where((w) => w.trim().length >= 2)
+      .toList();
+    const stop = {'播放','回憶','錄音','再播','重播','再聽','一下','那個','這個','幫我','請','幫忙','聽'};
+    for (final w in roughTokens) {
+      if (stop.contains(w)) continue;
+      if (tRaw.contains(w)) s += 3;
+      else if (dRaw.contains(w)) s += 1;
     }
 
-    // ✅ 若仍找不到，最後使用文字關鍵字比對
-    matched ??= memories.firstWhere(
-          (m) => keywords.any((kw) =>
-      (m['title'] ?? '').toString().contains(kw) ||
-          (m['description'] ?? '').toString().contains(kw)),
+    // 4) 有音檔加權
+    if (audio.isNotEmpty) s += 2;
+
+    return s;
+  }
+
+  // 先嘗試標題精準找
+  if (titleFromAI != null && titleFromAI.isNotEmpty) {
+    matched = memories.firstWhere(
+      (m) {
+        final t = (m['title'] ?? '').toString();
+        return t.isNotEmpty &&
+               (t == titleFromAI || t.contains(titleFromAI) || titleFromAI.contains(t));
+      },
       orElse: () => {},
     );
-
-    final audioUrl = matched['audioPath'];
-    if (audioUrl == null || audioUrl.isEmpty) {
-      debugPrint('❌ 沒有找到匹配的記憶或 audioPath 為空');
-      return false;
-    }
-
-    _lastPlayedMemory = matched;
-    return await _playAudioFromPath(audioUrl);
-  }
-
-
-
-
-  Future<bool> _playAudioFromPath(String path) async {
-    try {
-      await _audioPlayer.stop();
-      await _flutterTts.stop();
-
-      if (path.startsWith('http')) {
-        await _audioPlayer.setUrl(path);
-      } else if (path.startsWith('gs://')) {
-        final ref = FirebaseStorage.instance.refFromURL(path);
-        final downloadUrl = await ref.getDownloadURL();
-        await _audioPlayer.setUrl(downloadUrl);
-      } else {
-        await _audioPlayer.setFilePath(path); // 僅限手機
+    if (matched.isNotEmpty) {
+      final audioUrl = matched['audioPath'];
+      if (audioUrl != null && audioUrl.toString().isNotEmpty) {
+        _lastPlayedMemory = matched;
+        return await _playAudioFromPath(audioUrl);
       }
-
-      await _audioPlayer.play();
-      return true;
-    } catch (e) {
-      return false;
     }
   }
+
+  // 沒有標題或沒找到 → 用打分選最佳
+  int best = -1;
+  Map<String, dynamic>? bestMem;
+  for (final m in memories) {
+    final sc = scoreFor(m);
+    if (sc > best) {
+      best = sc;
+      bestMem = m;
+    }
+  }
+
+  if (bestMem != null && best >= 2) {
+    final audioUrl = bestMem['audioPath'];
+    if (audioUrl != null && audioUrl.toString().isNotEmpty) {
+      _lastPlayedMemory = bestMem;
+      debugPrint('✅ 比對成功，播放：${bestMem['title']}（score=$best）');
+      return await _playAudioFromPath(audioUrl);
+    } else {
+      debugPrint('⚠️ 找到回憶但沒音檔，標題：${bestMem['title']}');
+    }
+  }
+
+  debugPrint('❌ 未找到可播放的回憶');
+  return false;
+}
+
+
+
+
+Future<bool> _playAudioFromPath(String path) async {
+  try {
+    await _audioPlayer.stop();
+    await _flutterTts.stop();
+
+    if (path.startsWith('http')) {
+      await _audioPlayer.setUrl(path);
+    } else if (path.startsWith('gs://')) {
+      final ref = FirebaseStorage.instance.refFromURL(path);
+      final downloadUrl = await ref.getDownloadURL();
+      print('☁️ Firebase Storage URL: $downloadUrl');
+      await _audioPlayer.setUrl(downloadUrl);
+    } else {
+      print('📁 播放本地音檔: $path');
+      await _audioPlayer.setFilePath(path); // 僅限手機
+    }
+
+    await _audioPlayer.play();
+    print('▶️ 開始播放音檔');
+    return true;
+  } catch (e) {
+    print('❌ 音檔播放失敗: $e');
+    return false;
+  }
+}
 
   Future<String?> generateSmartSuggestion(List<String> recentMessages) async {
     const apiKey = 'AIzaSyCSiUQBqYBaWgpxHr37RcuKoaiiUOUfQhs';
@@ -320,6 +362,7 @@ $memorySummary
       final data = jsonDecode(response.body);
       return data['candidates']?[0]?['content']?['parts']?[0]?['text'];
     } else {
+      print('Gemini API error: ${response.body}');
       return null;
     }
   }
