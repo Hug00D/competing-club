@@ -28,6 +28,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
   Future<void> _sendMessage(String input) async {
     if (input.isEmpty) return;
 
+    if (!mounted) return;
+
     setState(() {
       _messages.add({'role': 'user', 'text': input});
       _isLoading = true;
@@ -45,6 +47,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
 
     final reply = await _service.processUserMessage(recentContext);
     if (reply != null) {
+      if (!mounted) return;
       setState(() {
         _messages.add({'role': 'ai', 'text': reply});
       });
@@ -54,8 +57,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
         final regex = RegExp(r'標題:\s*(.+)\s+描述:\s*(.+)\s+音檔:\s*(.+)');
         final match = regex.firstMatch(reply);
         if (match != null) {
-          final title = match.group(1);
-          final description = match.group(2);
+          //final title = match.group(1);
+          //final description = match.group(2);
           final audioUrl = match.group(3);
           if (audioUrl != null && audioUrl.isNotEmpty) {
             await _service.playMemoryAudioFromUrl(audioUrl);
@@ -71,6 +74,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
       await _service.speak(reply.replaceAll('[播放回憶]', '').replaceAll('[播放回憶錄]', '').trim());
       await _service.saveToFirestore(input, reply);
     }
+
+    if (!mounted) return;
 
     setState(() => _isLoading = false);
     await _scrollToBottom();
@@ -97,6 +102,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
         .where('uid', isEqualTo: uid)
         .orderBy('createdAt')
         .get();
+
+    if (!mounted) return;
 
     setState(() {
       _messages.clear();
@@ -143,7 +150,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withValues(alpha: 0.1),
                     blurRadius: 3,
                     offset: const Offset(0, 1),
                   ),
@@ -209,18 +216,42 @@ class _AICompanionPageState extends State<AICompanionPage> {
         child: Column(
           children: [
             SizedBox(
-              height: screenHeight / 9, // ✅ 頂部 LOGO 區塊高度
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              height: screenHeight / 9,
+              child: Stack(
                 children: [
-                  Image.asset('assets/images/memory_icon.png', width: 48),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'AI 陪伴',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF5B8EFF),
+                  // 左上返回鍵
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_rounded, color: Color(0xFF5B8EFF), size: 30,),
+                      onPressed: () {
+                        if (Navigator.canPop(context)) {
+                          Navigator.pop(context);
+                        } else {
+                          // 沒有上一頁可回的處理
+                        }
+                      },
+                    ),
+                  ),
+
+                  // 中間 LOGO + 標題
+                  Align(
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset('assets/images/memory_icon.png', width: 60),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'AI 陪伴',
+                          style: TextStyle(
+                            fontSize: 25,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF5B8EFF),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
