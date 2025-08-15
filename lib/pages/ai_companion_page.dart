@@ -224,7 +224,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
                     top: 0,
                     left: 0,
                     child: IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_rounded, color: Color(0xFF5B8EFF), size: 30,),
+                      icon: const Icon(Icons.home_rounded, color: Color(0xFF5B8EFF), size: 30,),
                       onPressed: () {
                         if (Navigator.canPop(context)) {
                           Navigator.pop(context);
@@ -336,4 +336,5 @@ class _AICompanionPageState extends State<AICompanionPage> {
       ),
     );
   }
+
 }
