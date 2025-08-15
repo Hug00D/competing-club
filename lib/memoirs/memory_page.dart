@@ -170,8 +170,6 @@ class _MemoryPageState extends State<MemoryPage> {
     if (ok == true) _loadMemories();
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -381,6 +379,24 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   void _showMemoryDetail(Memory memory) {
+    // 共用外框：白底 + 藍色描邊 + 柔和陰影
+    Widget framed(Widget child) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF2563EB), width: 2),
+          boxShadow: const [
+            BoxShadow(color: Color(0x802563EB), blurRadius: 14, offset: Offset(0, 6)),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: child,
+        ),
+      );
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -392,6 +408,12 @@ class _MemoryPageState extends State<MemoryPage> {
           minChildSize: 0.5,
           expand: false,
           builder: (context, scrollController) {
+            const double editBarHeight = 56;
+            const double fabSize = 56;
+            const double gap = 24;
+            final double bottomSafe = MediaQuery.of(context).padding.bottom;
+            final double padBottomForScroll = editBarHeight + fabSize + gap + bottomSafe;
+
             return Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
@@ -399,89 +421,139 @@ class _MemoryPageState extends State<MemoryPage> {
               ),
               child: Stack(
                 children: [
+                  // 內容
                   SingleChildScrollView(
                     controller: scrollController,
-                    padding: const EdgeInsets.only(bottom: 100),
+                    padding: EdgeInsets.only(bottom: padBottomForScroll),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 📷 首圖
-                        ClipRRect(
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
-                          ),
-                          child: memory.imagePaths.isNotEmpty
-                              ? Image.network(
-                            memory.imagePaths.first,
-                            fit: BoxFit.contain,
-                            width: double.infinity,
-                          )
-                              : Container(
-                            height: 100,
-                            width: double.infinity,
-                            color: const Color.fromARGB(255, 9, 87, 135),
-                          ),
-                        ),
-
-                        const SizedBox(height: 1),
-
-                        // 📝 描述區塊
+                        // 📷 首圖（左下角顯示標題）
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '描述',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF5B8EFF),
-                                ),
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                          child: framed(
+                            SizedBox(
+                              width: double.infinity,
+                              child: Stack(
+                                children: [
+                                  // 圖片
+                                  memory.imagePaths.isNotEmpty
+                                      ? Image.network(
+                                          memory.imagePaths.first,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              Container(height: 160, color: Colors.grey[300]),
+                                        )
+                                      : Container(height: 160, color: Colors.grey[200]),
+                                  // 底部漸層，讓白字更清楚
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: IgnorePointer(
+                                      child: Container(
+                                        height: 84,
+                                        decoration: const BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [Colors.transparent, Colors.black54],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  // 左下角標題
+                                  if ((memory.title).isNotEmpty)
+                                    Positioned(
+                                      left: 12,
+                                      right: 12,
+                                      bottom: 10,
+                                      child: Text(
+                                        memory.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w800,
+                                          shadows: [
+                                            Shadow(color: Colors.black45, blurRadius: 6, offset: Offset(0, 2)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                memory.description,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
 
+                        // 與圖片拉開距離
                         const SizedBox(height: 20),
 
-                        // 其餘圖片
+                        // 📝 描述（標題在卡片外）
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20),
+                          child: Text(
+                            '描述',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // 固定高度、內部可滾動
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: framed(
+                            SizedBox(
+                              height: 160,
+                              width: double.infinity,
+                              child: Scrollbar(
+                                thumbVisibility: true,
+                                child: SingleChildScrollView(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Text(
+                                    memory.description,
+                                    style: const TextStyle(fontSize: 16, color: Colors.black87),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // 其餘圖片（同樣加外框）
                         ...memory.imagePaths.skip(1).map((path) {
                           return Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
+                            child: framed(
+                              Image.network(
                                 path,
                                 fit: BoxFit.cover,
                                 width: double.infinity,
-                                errorBuilder: (_, __, ___) => Container(
-                                  height: 150,
-                                  color: Colors.grey[300],
-                                ),
+                                errorBuilder: (_, __, ___) => Container(height: 150, color: Colors.grey[300]),
                               ),
                             ),
                           );
                         }),
 
-                        const SizedBox(height: 100),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
 
-                  // 🔊 播放按鈕
+                  // 🔊 播放按鈕（避開底部編輯膠囊）
                   Positioned(
-                    bottom: 80,
                     right: 20,
+                    bottom: bottomSafe + editBarHeight + gap,
                     child: FloatingActionButton(
                       backgroundColor: const Color(0xFF5B8EFF),
                       child: const Icon(Icons.play_arrow, color: Colors.white, size: 32),
@@ -504,9 +576,9 @@ class _MemoryPageState extends State<MemoryPage> {
                     ),
                   ),
 
-                  // ✏️ 編輯按鈕
+                  // ✏️ 編輯按鈕（底部膠囊）
                   Positioned(
-                    bottom: 20 + MediaQuery.of(context).padding.bottom,
+                    bottom: 20 + bottomSafe,
                     left: 16,
                     right: 16,
                     child: _GradientPillButton(
@@ -538,10 +610,12 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
 
+
   @override
   void dispose() {
     _audioPlayer.dispose();
     _searchDebounce?.cancel();
     super.dispose();
   }
+
 }
