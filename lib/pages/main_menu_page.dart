@@ -59,6 +59,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
           // ✅ 這裡接「心情 + 可選的 note」
           onSubmit: (mood, note) async {
             await moodService.saveMood(mood, note: note);
+            if (!mounted) return;
 
             if (!context.mounted) return;
             Navigator.pop(context); // 先關掉底部面板
@@ -77,23 +78,23 @@ class _MainMenuPageState extends State<MainMenuPage> {
   }
 
   void _goToAIWithMood(String mood, [String? note]) {
-  final prompt = _promptForMood(mood, note);
-  Navigator.pushNamed(context, '/ai', arguments: {
-    'initialPrompt': prompt,
-    'fromMoodCheckin': true,
-    'mood': mood,
-    'note': note,
-  });
-}
+    final prompt = _promptForMood(mood, note);
+    Navigator.pushNamed(context, '/ai', arguments: {
+      'initialPrompt': prompt,
+      'fromMoodCheckin': true,
+      'mood': mood,
+      'note': note,
+    });
+  }
 
 
   // 小工具：顯示表情
-static const Map<String, String> _moodEmoji = {
-  '喜': '😊',
-  '怒': '😠',
-  '哀': '😢',
-  '樂': '😄',
-};
+  static const Map<String, String> _moodEmoji = {
+    '喜': '😊',
+    '怒': '😠',
+    '哀': '😢',
+    '樂': '😄',
+  };
 
   Future<void> _askToChat(String mood, String? note) async {
     const deepBlue = Color(0xFF0D47A1);
@@ -157,7 +158,7 @@ static const Map<String, String> _moodEmoji = {
                         const Text('發生了什麼：',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: deepBlue)),
                         const SizedBox(height: 6),
-                        Text(note!, style: const TextStyle(fontSize: 16, color: Colors.black87)),
+                        Text(note, style: const TextStyle(fontSize: 16, color: Colors.black87)),
                       ],
                     ],
                   ),
@@ -261,11 +262,12 @@ static const Map<String, String> _moodEmoji = {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,   
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => MoodCheckinSheet(
         onSubmit: (mood, note) async {
           await moodService.saveMood(mood, note: note); // 一樣寫入今天的紀錄
+          if (!mounted) return;
           if (context.mounted) Navigator.pop(context);
 
           if (mounted) {
@@ -340,15 +342,24 @@ static const Map<String, String> _moodEmoji = {
                     _buildGradientButton(
                       context,
                       text: '10 秒後提醒',
-                      onPressed: () {
-                        NotificationService.showTestNotification();
-                        NotificationService.scheduleExactNotification(
+                      onPressed: () async {
+                        // 立刻一則，確認通知權限/頻道 OK
+                        await NotificationService.showNow(
+                          id: 999,
+                          title: '✅ 測試通知',
+                          body: '立刻跳出的通知',
+                        );
+
+                        // 10 秒後：保底排程（先 exact，必要時自動補 AlarmClock）
+                        await NotificationService.scheduleWithFallback(
                           id: 1,
                           title: '吃藥提醒',
                           body: 'Sensei 該吃藥囉！',
-                          scheduledTime:
-                              DateTime.now().add(const Duration(seconds: 10)),
+                          when: DateTime.now().add(const Duration(seconds: 180)),
                         );
+
+                        // 如要引導開啟精準鬧鐘授權（可放在「通知異常」按鈕上）
+                        // await NotificationService.openExactAlarmSettings();
                       },
                     ),
                     _buildGradientButton(
@@ -401,7 +412,7 @@ static const Map<String, String> _moodEmoji = {
                   backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
                       ? NetworkImage(avatarUrl)
                       : const AssetImage('assets/images/default_avatar.png')
-                          as ImageProvider,
+                  as ImageProvider,
                   onBackgroundImageError: (e, s) {
                     debugPrint('頭像載入失敗: $e');
                   },
@@ -415,12 +426,12 @@ static const Map<String, String> _moodEmoji = {
   }
 
   Widget _buildMenuCard(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
+      BuildContext context, {
+        required IconData icon,
+        required String label,
+        required Color color,
+        required VoidCallback onTap,
+      }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: InkWell(
@@ -471,10 +482,10 @@ static const Map<String, String> _moodEmoji = {
   }
 
   Widget _buildGradientButton(
-    BuildContext context, {
-    required String text,
-    required VoidCallback onPressed,
-  }) {
+      BuildContext context, {
+        required String text,
+        required VoidCallback onPressed,
+      }) {
     return SizedBox(
       width: double.infinity,
       height: 50,
@@ -482,7 +493,7 @@ static const Map<String, String> _moodEmoji = {
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           padding: EdgeInsets.zero,
           backgroundColor: Colors.transparent,
           elevation: 3,
@@ -511,3 +522,4 @@ static const Map<String, String> _moodEmoji = {
     );
   }
 }
+
