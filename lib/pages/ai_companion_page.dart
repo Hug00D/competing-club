@@ -129,7 +129,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
         (text.contains('任務') || text.contains('要做') || text.contains('行程') || text.contains('提醒'));
     if (asksTodayTasks || text == '提醒我今天要做的事') {
       final tasks = await _service.fetchTodayTasks();
-      
+
       String reply;
       if (tasks.isEmpty) {
         reply = '今天沒有排定任務。';
@@ -152,7 +152,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
               start = DateFormat('HH:mm').parseStrict(t['time'] ?? '');
               start = DateTime(now.year, now.month, now.day, start.hour, start.minute);
             } catch (_) {}
-            
+
             if (start != null) {
               final diff = start.difference(now).inMinutes;
               if (diff >= 0 && diff <= 60) {
@@ -219,7 +219,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
       if (reply.contains('[播放回憶')) {
         // 完整三段（標題/描述/音檔）
         final full = RegExp(
-          r'(?:\[播放回憶(?:錄)?\])[\s\S]*?標題[:：]\s*(.*?)\s+描述[:：]\s*(.*?)\s+音檔[:：]\s*(\S+)',
+          r'\[播放回憶錄?\][\s\S]*?標題[:：]\s*(.*?)\s+描述[:：]\s*(.*?)\s+音檔[:：]\s*(\S+)',
           dotAll: true,
         ).firstMatch(reply);
 
@@ -232,7 +232,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
         } else {
           // 只有標題（常見）
           final titleOnly = RegExp(
-            r'(?:\[播放回憶(?:錄)?\])[\s\S]*?標題[:：]\s*(.+)',
+            r'\[播放回憶錄?\][\s\S]*?標題[:：]\s*(.+)',
             dotAll: true,
           ).firstMatch(reply);
           final t = titleOnly?.group(1)?.trim();
@@ -355,7 +355,7 @@ class _AICompanionPageState extends State<AICompanionPage> {
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1), // ✅ 修正 withValues
+                    color: Colors.grey.withValues(alpha: 0.1), // ✅ 修正 withValues
                     blurRadius: 3,
                     offset: const Offset(0, 1),
                   ),
