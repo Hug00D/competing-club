@@ -123,15 +123,15 @@ class AICompanionService {
     }
 
     // 正規化時間 + 排序
-    String _hm(String s) {
+    String hm(String s) {
       if (s.isEmpty) return s;
       final p = s.split(':');
       if (p.length >= 2) return '${p[0].padLeft(2,'0')}:${p[1].padLeft(2,'0')}';
       return s;
     }
     for (final t in results) {
-      t['time'] = _hm(t['time'] ?? '');
-      t['end']  = _hm(t['end']  ?? '');
+      t['time'] = hm(t['time'] ?? '');
+      t['end']  = hm(t['end']  ?? '');
     }
     results.sort((a,b) => (a['time']??'').compareTo(b['time']??''));
 
@@ -287,8 +287,11 @@ class AICompanionService {
 
     // AI 標題
     Map<String, dynamic>? matched;
-    final titleMatch = RegExp(r'\[播放回憶(?:錄)?\][\s\S]*?標題[:：]\s*(.+)', dotAll: true)
-        .firstMatch(userInput);
+    final titleMatch = RegExp(
+      r'\[播放回憶錄?\][\s\S]*?標題[:：]\s*(.+)',
+      dotAll: true,
+    ).firstMatch(userInput);
+
     final titleFromAI = titleMatch?.group(1)?.trim();
 
     final ctxRaw = userInput;
@@ -323,8 +326,11 @@ class AICompanionService {
       const stop = {'播放','回憶','錄音','再播','重播','再聽','一下','那個','這個','幫我','請','幫忙','聽'};
       for (final w in roughTokens) {
         if (stop.contains(w)) continue;
-        if (tRaw.contains(w)) s += 3;
-        else if (dRaw.contains(w)) s += 1;
+        if (tRaw.contains(w)) {
+          s += 3;
+        } else if (dRaw.contains(w)) {
+          s += 1;
+        }
       }
 
       if (audio.isNotEmpty) s += 2;
@@ -335,10 +341,10 @@ class AICompanionService {
     // 先嘗試標題精準找
     if (titleFromAI != null && titleFromAI.isNotEmpty) {
       matched = memories.firstWhere(
-        (m) {
+            (m) {
           final t = (m['title'] ?? '').toString();
           return t.isNotEmpty &&
-                 (t == titleFromAI || t.contains(titleFromAI) || titleFromAI.contains(t));
+              (t == titleFromAI || t.contains(titleFromAI) || titleFromAI.contains(t));
         },
         orElse: () => {},
       );
