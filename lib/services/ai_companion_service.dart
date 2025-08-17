@@ -142,69 +142,153 @@ class AICompanionService {
     return results;
   }
 
-  // 把 "HH:mm" / "HH:mm:ss" 解析到今天日期
-  DateTime? _parseHmToday(String s) {
-    final now = DateTime.now();
-    for (final fmt in const ['HH:mm','HH:mm:ss']) {
-      try {
-        final tm = DateFormat(fmt).parseStrict(s);
-        return DateTime(now.year, now.month, now.day, tm.hour, tm.minute);
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  /// 產生「前後 30 分鐘」提醒句（沒有就回 null），含去重
+  /// 產生「聚合提醒」文字：同時列出 進行中 / 30 分內開始 / 剛剛錯過（30 分內）
+  /// 規則：
+  /// - 若本次沒有「新」任務出現，回傳 null（避免打擾）
+  /// - 若有新任務出現：訊息中會包含 **所有進行中** 的任務（即使之前提醒過），
+  ///   以及本次新出現的「即將開始 / 剛錯過」任務。
   Future<String?> taskReminderText() async {
     final tasks = await fetchTodayTasks(verbose: false);
     if (tasks.isEmpty) return null;
 
+    DateTime? _parseHmToday(String s) {
+      final now = DateTime.now();
+      for (final fmt in const ['HH:mm', 'HH:mm:ss']) {
+        try {
+          final tm = DateFormat(fmt).parseStrict(s);
+          return DateTime(now.year, now.month, now.day, tm.hour, tm.minute);
+        } catch (_) {}
+      }
+      return null;
+    }
+
     final now = DateTime.now();
     final todayKey = DateFormat('yyyy-MM-dd').format(now);
 
-    String? best;
-    String? key;
+    // 分類
+    final List<Map<String, String>> ongoingAll = [];
+    final List<Map<String, String>> upcomingAll = [];
+    final List<Map<String, String>> missedAll = [];
+
+    // 追蹤哪些是「新」的（尚未提醒過）
+    final List<String> newKeys = [];
+
+    String keyOf(Map<String, String> t, String label) =>
+        '$todayKey|${t['time']}|${t['task']}|$label';
 
     for (final t in tasks) {
       final done = (t['done'] ?? '').toLowerCase() == 'true';
       if (done) continue;
 
       final start = _parseHmToday(t['time'] ?? '');
-      final end   = _parseHmToday(t['end']  ?? '') ?? (start?.add(const Duration(minutes: 30)));
+      final end = _parseHmToday(t['end'] ?? '') ?? (start?.add(const Duration(minutes: 30)));
       if (start == null) continue;
 
-      // 進行中（最高優先）
+      // 進行中（最高優先）：訊息內永遠顯示
       if (end != null && now.isAfter(start) && now.isBefore(end)) {
-        key = '$todayKey|${t['time']}|${t['task']}|ongoing';
-        best = '現在進行：${t['task']}（${t['time']}）';
-        break;
+        ongoingAll.add(t);
+        // 進行中這個「狀態鍵」
+        final k = keyOf(t, 'ongoing');
+        if (!_remindedToday.contains(k)) newKeys.add(k);
+        continue;
       }
 
       // 30 分鐘內即將開始
       final diffMin = start.difference(now).inMinutes;
       if (diffMin >= 0 && diffMin <= 30) {
-        key = '$todayKey|${t['time']}|${t['task']}|upcoming30';
-        best = '30 分鐘內有任務：${t['task']}（${t['time']}）';
-        break;
+        upcomingAll.add(t);
+        final k = keyOf(t, 'upcoming30');
+        if (!_remindedToday.contains(k)) newKeys.add(k);
+        continue;
       }
 
-      // 剛錯過（30 分鐘內）
+      // 剛剛錯過（30 分內）
       if (end != null) {
         final miss = now.difference(end).inMinutes;
         if (miss >= 0 && miss <= 30) {
-          key = '$todayKey|${t['time']}|${t['task']}|missed30';
-          best = '剛剛錯過：${t['task']}（${t['time']}），要補做嗎？';
-          break;
+          missedAll.add(t);
+          final k = keyOf(t, 'missed30');
+          if (!_remindedToday.contains(k)) newKeys.add(k);
         }
       }
     }
 
-    if (best != null && key != null) {
-      if (_remindedToday.contains(key)) return null;
-      _remindedToday.add(key);
+    // 沒有「新」任務出現 → 不提醒（避免重複刷存在感）
+    if (newKeys.isEmpty) return null;
+
+    String fmt(Map<String, String> t) => '${t['time']}：${t['task']}';
+
+    final parts = <String>[];
+    if (ongoingAll.isNotEmpty) {
+      parts.add('進行中：${ongoingAll.map(fmt).join('、')}');
     }
-    return best;
+    // 只把「本次新出現」的 upcoming/missed 列入訊息（舊的就不再重複）
+    final upcomingNew = upcomingAll.where((t) => newKeys.contains(keyOf(t, 'upcoming30'))).toList();
+    final missedNew = missedAll.where((t) => newKeys.contains(keyOf(t, 'missed30'))).toList();
+
+    if (upcomingNew.isNotEmpty) {
+      parts.add('30 分內開始：${upcomingNew.map(fmt).join('、')}');
+    }
+    if (missedNew.isNotEmpty) {
+      parts.add('剛錯過：${missedNew.map(fmt).join('、')}');
+    }
+
+    // 標記所有「新鍵」已提醒，避免下次重複。
+    _remindedToday.addAll(newKeys);
+
+    return parts.isEmpty ? null : '提醒您，${parts.join('；')}。';
   }
+
+  /// 提供給 AI 的簡短摘要（不做去重、不佔太多字）
+  /// 例： "進行中 1 項、30 分內 2 項"
+  Future<String?> taskHintSummary() async {
+    final tasks = await fetchTodayTasks(verbose: false);
+    if (tasks.isEmpty) return null;
+
+    DateTime? _parseHmToday(String s) {
+      final now = DateTime.now();
+      for (final fmt in const ['HH:mm', 'HH:mm:ss']) {
+        try {
+          final tm = DateFormat(fmt).parseStrict(s);
+          return DateTime(now.year, now.month, now.day, tm.hour, tm.minute);
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    final now = DateTime.now();
+    int cOngoing = 0, cUpcoming = 0, cMissed = 0;
+
+    for (final t in tasks) {
+      final done = (t['done'] ?? '').toLowerCase() == 'true';
+      if (done) continue;
+
+      final start = _parseHmToday(t['time'] ?? '');
+      final end = _parseHmToday(t['end'] ?? '') ?? (start?.add(const Duration(minutes: 30)));
+      if (start == null) continue;
+
+      if (end != null && now.isAfter(start) && now.isBefore(end)) {
+        cOngoing++;
+        continue;
+      }
+      final diffMin = start.difference(now).inMinutes;
+      if (diffMin >= 0 && diffMin <= 30) {
+        cUpcoming++;
+        continue;
+      }
+      if (end != null) {
+        final miss = now.difference(end).inMinutes;
+        if (miss >= 0 && miss <= 30) cMissed++;
+      }
+    }
+
+    final parts = <String>[];
+    if (cOngoing > 0) parts.add('進行中 $cOngoing 項');
+    if (cUpcoming > 0) parts.add('30 分內 $cUpcoming 項');
+    if (cMissed > 0) parts.add('剛錯過 $cMissed 項');
+    return parts.isEmpty ? null : parts.join('、');
+  }
+
 
   /// 只語音念提醒（保留舊呼叫相容）
   Future<void> remindIfUpcomingTask() async {
@@ -461,7 +545,7 @@ ${recentMessages.join('\n')}
     }
 
     // 取得 30 分鐘提醒（若有）
-    final taskHint = await taskReminderText();
+    final taskHint = await taskHintSummary(); // 簡短摘要給 AI
     final nowStr = DateFormat('HH:mm').format(DateTime.now());
 
     // ====== 改良後 Prompt（你要的內容都在，並更精準）======
