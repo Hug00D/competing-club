@@ -1,3 +1,4 @@
+import 'dart:io'; // 👈 新增：用來判斷 Android
 import 'package:flutter/material.dart';
 import '../memoirs/memory_page.dart';
 import 'user_task_page.dart';
@@ -5,11 +6,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:memory/services/notification_service.dart';
 import 'package:memory/services/location_uploader.dart';
-import 'package:memory/services/mood_service.dart';            // ✅ 新增
-import 'package:memory/pages/mood_checkin_sheet.dart';       // ✅ 新增
-
-// 可選：若要語音提示，打開下面這行並在 _maybeAskMood() 說話
-// import 'package:flutter_tts/flutter_tts.dart';
+import 'package:memory/services/mood_service.dart';            // ✅ 你原本新增
+import 'package:memory/pages/mood_checkin_sheet.dart';       // ✅ 你原本新增
 
 class MainMenuPage extends StatefulWidget {
   final String userRole;
@@ -21,20 +19,40 @@ class MainMenuPage extends StatefulWidget {
 
 class _MainMenuPageState extends State<MainMenuPage> {
   bool _askedToday = false;
-  // final flutterTts = FlutterTts(); // 可選：若要語音提示
+  bool _askedExactAlarmPrompt = false; // 👈 新增：本次啟動僅提示一次
 
   @override
   void initState() {
     super.initState();
     LocationUploader().start(); // ✅ 啟動位置上傳
-    // 等第一幀 build 完成後再檢查，避免 context 尚未就緒
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAskMood());
+    // 等第一幀 build 完成後再檢查／提示，避免啟動時直接跳系統頁造成黑屏
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _maybePromptExactAlarm(); // 👈 新增：權限引導
+      await _maybeAskMood();          // 你原本的心情打卡流程
+    });
   }
 
   @override
   void dispose() {
     LocationUploader().stop(); // ✅ 停止監聽位置
     super.dispose();
+  }
+
+  // 👇 新增：只在畫面出來後，以 bottom sheet 引導「精準鬧鐘」權限，不自動跳系統頁
+  Future<void> _maybePromptExactAlarm() async {
+    if (!mounted) return;
+    if (!Platform.isAndroid) return;
+    if (_askedExactAlarmPrompt) return; // 本次啟動只提示一次
+    _askedExactAlarmPrompt = true;
+
+    // 可以在這裡加你自己的條件判斷（例如偵測排程是否被抑制等）
+    // 這裡先單純提示一次
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ExactAlarmPromptSheet(),
+    );
   }
 
   Future<void> _maybeAskMood() async {
@@ -46,9 +64,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
     final already = await moodService.hasCheckedInToday();
     if (!already && !_askedToday) {
       _askedToday = true;
-
-      // 可選：語音提示
-      // await flutterTts.speak("今天的心情是？請選擇：喜、怒、哀、樂");
 
       if (!mounted) return;
       showModalBottomSheet(
@@ -87,8 +102,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
     });
   }
 
-
-  // 小工具：顯示表情
   static const Map<String, String> _moodEmoji = {
     '喜': '😊',
     '怒': '😠',
@@ -158,7 +171,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                         const Text('發生了什麼：',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: deepBlue)),
                         const SizedBox(height: 6),
-                        Text(note, style: const TextStyle(fontSize: 16, color: Colors.black87)),
+                        Text(note!, style: const TextStyle(fontSize: 16, color: Colors.black87)),
                       ],
                     ],
                   ),
@@ -229,8 +242,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
     }
   }
 
-
-
   String _promptForMood(String mood, [String? note]) {
     final extra = (note == null || note.trim().isEmpty) ? '' : '（補充：$note）';
     switch (mood) {
@@ -245,7 +256,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
         return '我今天心情愉悅（樂）$extra。請跟我聊聊今天最放鬆的時刻，並提供一個能維持好心情的小習慣。';
     }
   }
-
 
   Future<void> _openMoodTester() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -282,7 +292,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -350,15 +359,15 @@ class _MainMenuPageState extends State<MainMenuPage> {
                           body: '立刻跳出的通知',
                         );
 
-                        // 10 秒後：保底排程（先 exact，必要時自動補 AlarmClock）
+                        // 10 秒後：保底排程
                         await NotificationService.scheduleWithFallback(
                           id: 1,
                           title: '吃藥提醒',
                           body: 'Sensei 該吃藥囉！',
-                          when: DateTime.now().add(const Duration(seconds: 180)),
+                          when: DateTime.now().add(const Duration(seconds: 10)), // 👈 真正 10 秒
                         );
 
-                        // 如要引導開啟精準鬧鐘授權（可放在「通知異常」按鈕上）
+                        // 如要引導開啟精準鬧鐘授權，請使用下方按鈕或在上方彈窗選擇「前往設定」
                         // await NotificationService.openExactAlarmSettings();
                       },
                     ),
@@ -412,7 +421,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                   backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
                       ? NetworkImage(avatarUrl)
                       : const AssetImage('assets/images/default_avatar.png')
-                  as ImageProvider,
+                          as ImageProvider,
                   onBackgroundImageError: (e, s) {
                     debugPrint('頭像載入失敗: $e');
                   },
@@ -426,12 +435,12 @@ class _MainMenuPageState extends State<MainMenuPage> {
   }
 
   Widget _buildMenuCard(
-      BuildContext context, {
-        required IconData icon,
-        required String label,
-        required Color color,
-        required VoidCallback onTap,
-      }) {
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: InkWell(
@@ -472,8 +481,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                   ),
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios,
-                  size: 18, color: Colors.grey),
+              const Icon(Icons.arrow_forward_ios, size: 18, color: Colors.grey),
             ],
           ),
         ),
@@ -482,18 +490,17 @@ class _MainMenuPageState extends State<MainMenuPage> {
   }
 
   Widget _buildGradientButton(
-      BuildContext context, {
-        required String text,
-        required VoidCallback onPressed,
-      }) {
+    BuildContext context, {
+    required String text,
+    required VoidCallback onPressed,
+  }) {
     return SizedBox(
       width: double.infinity,
       height: 50,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           padding: EdgeInsets.zero,
           backgroundColor: Colors.transparent,
           elevation: 3,
@@ -512,9 +519,10 @@ class _MainMenuPageState extends State<MainMenuPage> {
             child: Text(
               text,
               style: const TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold),
+                fontSize: 18,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ),
@@ -523,3 +531,55 @@ class _MainMenuPageState extends State<MainMenuPage> {
   }
 }
 
+// 👇 新增：權限引導的 BottomSheet（保持簡潔）
+class _ExactAlarmPromptSheet extends StatelessWidget {
+  const _ExactAlarmPromptSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    const title = '需要允許「精準鬧鐘」';
+    const msg = '為了讓背景提醒準時且能在背景產生 AI 回覆並通知你，請在系統中開啟「精準鬧鐘」。';
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 16, offset: Offset(0, 6))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          const Text(msg, textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('之後再說'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    // 先請通知權限（如果尚未允許）
+                    await NotificationService.requestNotificationPermission();
+                    // 再帶去精準鬧鐘設定頁（讓使用者手動開）
+                    await NotificationService.openExactAlarmSettings();
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: const Text('前往設定'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
