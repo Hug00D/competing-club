@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 
+// 👇 新增：通知服務
+import 'package:memory/services/notification_service.dart';
 
 class AICompanionPage extends StatefulWidget {
   const AICompanionPage({super.key});
@@ -13,7 +15,8 @@ class AICompanionPage extends StatefulWidget {
   State<AICompanionPage> createState() => _AICompanionPageState();
 }
 
-class _AICompanionPageState extends State<AICompanionPage> {
+// 👇 新增：生命週期觀察，不改 UI
+class _AICompanionPageState extends State<AICompanionPage> with WidgetsBindingObserver {
   final AICompanionService _service = AICompanionService();
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -23,13 +26,24 @@ class _AICompanionPageState extends State<AICompanionPage> {
   bool _isLoading = false;
   bool _bootstrapped = false; // ✅ 避免重複觸發開場訊息
 
+  // 👇 新增：記錄前景/背景狀態
+  AppLifecycleState _life = AppLifecycleState.resumed;
+  bool get _inForeground => _life == AppLifecycleState.resumed;
+
   @override
   void initState() {
     super.initState();
+    // 👇 新增：掛上觀察者（不改 UI）
+    WidgetsBinding.instance.addObserver(this);
     _loadPreviousMessages();
     _startReminderLoop();
   }
 
+  // 👇 新增：更新目前是否在前景
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _life = state;
+  }
 
   void _startReminderLoop() {
     _reminderTimer?.cancel();
@@ -41,6 +55,17 @@ class _AICompanionPageState extends State<AICompanionPage> {
         setState(() => _messages.add({'role': 'ai', 'text': tip}));
         await _service.speak(tip);
         await _scrollToBottom();
+
+        // 👇 新增：只有在背景時才推通知，避免在頁面內被騷擾
+        if (!_inForeground) {
+          final body = tip.length > 100 ? '${tip.substring(0, 100)}…' : tip;
+          await NotificationService.showNow(
+            id: 61000 + DateTime.now().minute,
+            title: '提醒你今天的任務',
+            body: body,
+            payload: 'route:/ai',
+          );
+        }
       }
     });
 
@@ -51,10 +76,20 @@ class _AICompanionPageState extends State<AICompanionPage> {
         setState(() => _messages.add({'role': 'ai', 'text': tip}));
         await _service.speak(tip);
         await _scrollToBottom();
+
+        // 👇 新增：背景才推通知
+        if (!_inForeground) {
+          final body = tip.length > 100 ? '${tip.substring(0, 100)}…' : tip;
+          await NotificationService.showNow(
+            id: 61000 + DateTime.now().minute,
+            title: '提醒你今天的任務',
+            body: body,
+            payload: 'route:/ai',
+          );
+        }
       }
     });
   }
-
 
   // ✅ 讀取路由參數：若是從心情打卡過來，主動發送「關懷開場」
   @override
@@ -91,6 +126,18 @@ class _AICompanionPageState extends State<AICompanionPage> {
       setState(() {
         _messages.add({'role': 'ai', 'text': reply});
       });
+
+      // 👇 新增：背景時對「關懷開場」也發通知
+      if (!_inForeground && reply.isNotEmpty) {
+        final body = reply.length > 80 ? '${reply.substring(0, 80)}…' : reply;
+        await NotificationService.showNow(
+          id: DateTime.now().millisecondsSinceEpoch % 100000,
+          title: 'AI 關心你',
+          body: body,
+          payload: 'route:/ai',
+        );
+      }
+
       await _service.remindIfUpcomingTask();
       await _service.speak(reply.trim());
       await _service.saveToFirestore('（系統）心情打卡開場：$mood｜${note ?? ''}', reply);
@@ -176,6 +223,18 @@ class _AICompanionPageState extends State<AICompanionPage> {
 
       if (!mounted) return;
       setState(() => _messages.add({'role': 'ai', 'text': reply}));
+
+      // 👇 新增：這也是 AI 回覆，在背景時推通知
+      if (!_inForeground && reply.isNotEmpty) {
+        final body = reply.length > 80 ? '${reply.substring(0, 80)}…' : reply;
+        await NotificationService.showNow(
+          id: DateTime.now().millisecondsSinceEpoch % 100000,
+          title: 'AI 陪伴回覆了',
+          body: body,
+          payload: 'route:/ai',
+        );
+      }
+
       await _service.speak(reply);
       await _service.saveToFirestore(text, reply);
 
@@ -193,6 +252,17 @@ class _AICompanionPageState extends State<AICompanionPage> {
         const reply = '已為你播放回憶。';
         if (!mounted) return;
         setState(() => _messages.add({'role': 'ai', 'text': reply}));
+
+        // 👇 新增：背景時推通知
+        if (!_inForeground) {
+          await NotificationService.showNow(
+            id: DateTime.now().millisecondsSinceEpoch % 100000,
+            title: 'AI 陪伴回覆了',
+            body: reply,
+            payload: 'route:/ai',
+          );
+        }
+
         await _service.speak(reply);
         await _service.saveToFirestore(text, reply);
 
@@ -212,6 +282,17 @@ class _AICompanionPageState extends State<AICompanionPage> {
     if (reply != null) {
       if (!mounted) return;
       setState(() => _messages.add({'role': 'ai', 'text': reply}));
+
+      // 👇 新增：AI 一般回覆，背景時推通知
+      if (!_inForeground && reply.isNotEmpty) {
+        final body = reply.length > 80 ? '${reply.substring(0, 80)}…' : reply;
+        await NotificationService.showNow(
+          id: DateTime.now().millisecondsSinceEpoch % 100000,
+          title: 'AI 陪伴回覆了',
+          body: body,
+          payload: 'route:/ai',
+        );
+      }
 
       // -------- C) 播放回憶：解析更寬鬆 + 語意後備 --------
       bool playedByExplicitBlock = false;
@@ -273,6 +354,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
 
   @override
   void dispose() {
+    // 👇 新增：移除觀察者
+    WidgetsBinding.instance.removeObserver(this);
     _reminderTimer?.cancel();
     _controller.dispose();
     _scrollController.dispose();
@@ -296,7 +379,6 @@ class _AICompanionPageState extends State<AICompanionPage> {
       // 略過偶發的滾動競態錯誤
     }
   }
-
 
   Future<void> _loadPreviousMessages() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -355,7 +437,8 @@ class _AICompanionPageState extends State<AICompanionPage> {
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.1), // ✅ 修正 withValues
+                    // ✅ 修正：withValues 會編譯失敗，改用 withOpacity
+                    color: Colors.grey.withOpacity(0.1),
                     blurRadius: 3,
                     offset: const Offset(0, 1),
                   ),
