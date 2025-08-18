@@ -171,7 +171,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                         const Text('發生了什麼：',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: deepBlue)),
                         const SizedBox(height: 6),
-                        Text(note!, style: const TextStyle(fontSize: 16, color: Colors.black87)),
+                        Text(note, style: const TextStyle(fontSize: 16, color: Colors.black87)),
                       ],
                     ],
                   ),
@@ -352,25 +352,23 @@ class _MainMenuPageState extends State<MainMenuPage> {
                       context,
                       text: '10 秒後提醒',
                       onPressed: () async {
-                        // 立刻一則，確認通知權限/頻道 OK
+                        // 測試立即通知
                         await NotificationService.showNow(
-                          id: 999,
+                          id: 1000,
                           title: '✅ 測試通知',
-                          body: '立刻跳出的通知',
+                          body: '這是立即通知',
                         );
 
-                        // 10 秒後：保底排程
-                        await NotificationService.scheduleWithFallback(
-                          id: 1,
-                          title: '吃藥提醒',
-                          body: 'Sensei 該吃藥囉！',
-                          when: DateTime.now().add(const Duration(seconds: 10)), // 👈 真正 10 秒
+                        // 測試排程 10 秒後的通知
+                        await NotificationService.scheduleAlarmClock(
+                          id: 1001,
+                          title: '⏰ 測試鬧鐘通知',
+                          body: '這是 10 秒後的排程通知',
+                          when: DateTime.now().add(const Duration(seconds: 10)),
                         );
-
-                        // 如要引導開啟精準鬧鐘授權，請使用下方按鈕或在上方彈窗選擇「前往設定」
-                        // await NotificationService.openExactAlarmSettings();
                       },
                     ),
+
                     _buildGradientButton(
                       context,
                       text: '測試：打開心情打卡',
@@ -421,7 +419,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                   backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
                       ? NetworkImage(avatarUrl)
                       : const AssetImage('assets/images/default_avatar.png')
-                          as ImageProvider,
+                  as ImageProvider,
                   onBackgroundImageError: (e, s) {
                     debugPrint('頭像載入失敗: $e');
                   },
@@ -435,12 +433,12 @@ class _MainMenuPageState extends State<MainMenuPage> {
   }
 
   Widget _buildMenuCard(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
+      BuildContext context, {
+        required IconData icon,
+        required String label,
+        required Color color,
+        required VoidCallback onTap,
+      }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: InkWell(
@@ -490,10 +488,10 @@ class _MainMenuPageState extends State<MainMenuPage> {
   }
 
   Widget _buildGradientButton(
-    BuildContext context, {
-    required String text,
-    required VoidCallback onPressed,
-  }) {
+      BuildContext context, {
+        required String text,
+        required VoidCallback onPressed,
+      }) {
     return SizedBox(
       width: double.infinity,
       height: 50,

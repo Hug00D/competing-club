@@ -8,8 +8,9 @@ import 'dart:math' as math;
 
 class NavHomePage extends StatefulWidget {
   final String careReceiverUid;
+  final String careReceiverName;
 
-  const NavHomePage({super.key, required this.careReceiverUid});
+  const NavHomePage({super.key, required this.careReceiverUid, required this.careReceiverName});
 
   @override
   State<NavHomePage> createState() => _NavHomePageState();
@@ -21,6 +22,9 @@ class _NavHomePageState extends State<NavHomePage> {
   LatLng? _careReceiverPosition;
   LatLng? _safeZoneCenter;
   double _safeZoneRadius = 300;
+  bool _locationEnabled = false;   // ✅ 從 Firestore safeZone.locationEnabled 帶入
+  bool _loading = true;
+
 
   @override
   void initState() {
@@ -30,9 +34,14 @@ class _NavHomePageState extends State<NavHomePage> {
   }
 
   Future<void> _init() async {
-    await _initCurrentPosition();
-    await _loadCareReceiverLocation();
-    await _loadSafeZone();
+    setState(() => _loading = true);
+    await Future.wait([
+      _loadSafeZone(),
+      _initCurrentPosition(),
+      _loadCareReceiverLocation(),
+    ]);
+    if (!mounted) return;
+    setState(() => _loading = false);
   }
 
   Future<void> _initCurrentPosition() async {
@@ -56,6 +65,7 @@ class _NavHomePageState extends State<NavHomePage> {
 
     Position pos = await Geolocator.getCurrentPosition();
     debugPrint('✅ 拿到目前位置: ${pos.latitude}, ${pos.longitude}');
+    if (!mounted) return;
     setState(() {
       _currentPosition = LatLng(pos.latitude, pos.longitude);
     });
@@ -70,6 +80,7 @@ class _NavHomePageState extends State<NavHomePage> {
       (centerMap['lng'] as num).toDouble(),
     );
     final double newRadius = (r['radius'] as num).toDouble();
+    if (!mounted) return;
 
     setState(() {
       _safeZoneCenter = newCenter;
@@ -96,6 +107,7 @@ class _NavHomePageState extends State<NavHomePage> {
       if (data != null && data['location'] != null) {
         final lat = data['location']['lat'];
         final lng = data['location']['lng'];
+        if (!mounted) return;
         setState(() {
           _careReceiverPosition = LatLng(lat, lng);
         });
@@ -111,41 +123,48 @@ class _NavHomePageState extends State<NavHomePage> {
   Future<void> _loadSafeZone() async {
     debugPrint('🟢 載入 safeZone 資料...');
     try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(widget.careReceiverUid);
-      final doc = await docRef.get();
-      final data = doc.data();
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.careReceiverUid);
+      final snap = await docRef.get();
+      if (!mounted) return;
 
-      if (data != null && data['safeZone'] != null) {
-        final zone = data['safeZone'];
-        setState(() {
-          _safeZoneCenter = LatLng(zone['lat'], zone['lng']);
-          _safeZoneRadius = (zone['radius'] ?? 300).toDouble();
-        });
-      } else {
-        // ⛳ 自動補上預設值
-        const defaultLat = 24.1777546;
-        const defaultLng = 120.6429611;
-        const defaultRadius = 300.0;
+      final data = snap.data() ?? {};
+      final zone = Map<String, dynamic>.from(data['safeZone'] ?? {});
 
-        await docRef.update({
-          'safeZone': {
-            'lat': defaultLat,
-            'lng': defaultLng,
-            'radius': defaultRadius,
-          }
-        });
+      // 兼容 3 種路徑：safeZone.locationEnabled / location.locationEnabled / root.locationEnabled
+      dynamic rawEnabled = zone['locationEnabled'];
+      rawEnabled ??= (data['location'] is Map ? data['location']['locationEnabled'] : null);
+      rawEnabled ??= data['locationEnabled'];
 
-        setState(() {
-          _safeZoneCenter = const LatLng(defaultLat, defaultLng);
-          _safeZoneRadius = defaultRadius;
-        });
+      final bool enabled = (rawEnabled is bool)
+          ? rawEnabled
+          : (rawEnabled?.toString().toLowerCase() == 'true');
 
-        debugPrint('🟢 SafeZone 不存在，自動補上預設值');
-      }
+      // 圓心/半徑（圓心可無）
+      final double? lat = (zone['lat'] is num) ? (zone['lat'] as num).toDouble() : null;
+      final double? lng = (zone['lng'] is num) ? (zone['lng'] as num).toDouble() : null;
+      final double radius = (zone['radius'] is num)
+          ? (zone['radius'] as num).toDouble()
+          : 300.0;
+
+      setState(() {
+        _locationEnabled = enabled;                           // ← 只看這個決定是否顯示地圖
+        _safeZoneCenter  = (lat != null && lng != null) ? LatLng(lat, lng) : null;
+        _safeZoneRadius  = radius;
+      });
+
+      debugPrint('📄 flags: safeZone.locationEnabled=${zone['locationEnabled']} '
+          'root.locationEnabled=${data['locationEnabled']} '
+          'location.locationEnabled=${(data['location'] as Map?)?['locationEnabled']} '
+          '→ enabled=$_locationEnabled, center=$_safeZoneCenter, radius=$_safeZoneRadius');
     } catch (e) {
       debugPrint('❌ 載入 safeZone 失敗: $e');
     }
   }
+
+
+
 
 
   void _tryMoveToCareReceiver() {
@@ -157,133 +176,7 @@ class _NavHomePageState extends State<NavHomePage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bool hasSafeZone = _safeZoneCenter != null && _safeZoneRadius > 0;
-    final bool isInside = hasSafeZone && _careReceiverPosition != null
-        ? _distanceMeters(_careReceiverPosition!, _safeZoneCenter!) <= _safeZoneRadius
-        : false;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFD8F2DA), // 柔綠背景
-      appBar: AppBar(
-        title: const Text(
-          "被照顧者位置",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-        ),
-        backgroundColor: const Color(0xFF28965A), // 深綠
-        foregroundColor: Colors.white,
-        elevation: 2,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: '設定安全範圍',
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SafeZoneSettingPage(
-                    careReceiverUid: widget.careReceiverUid,
-                  ),
-                ),
-              );
-
-              if (!mounted) return;
-
-              if (result is Map && result['updated'] == true) {
-                _applySafeZoneFromResult(result);   // ✅ 直接用回傳數值更新+移動相機
-              } else if (result == 'updated') {
-                // 備案：如果設定頁只回傳字串，就重新讀一次 Firestore
-                await _loadSafeZone();
-                if (!mounted) return;
-                setState(() {});
-                if (_safeZoneCenter != null) {
-                  await _mapController?.animateCamera(
-                    CameraUpdate.newLatLngZoom(_safeZoneCenter!, 16),
-                  );
-                }
-              }
-            },
-
-          )
-        ],
-      ),
-      body: _currentPosition == null
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-        children: [
-          GoogleMap(
-            key: ValueKey('${_safeZoneCenter?.latitude},${_safeZoneCenter?.longitude},$_safeZoneRadius'),
-            initialCameraPosition: CameraPosition(
-              target: _currentPosition!,
-              zoom: 16,
-            ),
-            onMapCreated: (controller) {
-              _mapController = controller;
-              _tryMoveToCareReceiver();
-            },
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            markers: {
-              // 我的位置（藍）
-              Marker(
-                markerId: const MarkerId("current"),
-                position: _currentPosition!,
-                infoWindow: const InfoWindow(title: "我的位置"),
-              ),
-              // 被照顧者（主綠）
-              if (_careReceiverPosition != null)
-                Marker(
-                  markerId: const MarkerId("careReceiver"),
-                  position: _careReceiverPosition!,
-                  infoWindow: const InfoWindow(title: "被照顧者"),
-                  icon: BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueGreen,
-                  ),
-                ),
-            },
-            circles: !hasSafeZone
-                ? {}
-                : {
-              Circle(
-                circleId: const CircleId("safeZone"),
-                center: _safeZoneCenter!,
-                radius: _safeZoneRadius,
-                fillColor: const Color(0xFF2CEAA3).withAlpha(48), // 柔綠填充
-                strokeColor: const Color(0xFF28965A),            // 深綠外框
-                strokeWidth: 2,
-              ),
-            },
-          ),
-
-          // 右上：資訊小卡（半徑）
-          if (hasSafeZone)
-            Positioned(
-              top: 12,
-              right: 12,
-              child: _infoChip(
-                icon: Icons.radar,
-                text: '半徑 ${_safeZoneRadius.toStringAsFixed(0)} m',
-              ),
-            ),
-
-          // 左上：狀態小卡（是否在安全範圍內）
-          if (hasSafeZone && _careReceiverPosition != null)
-            Positioned(
-              top: 12,
-              left: 12,
-              child: _infoChip(
-                icon: isInside ? Icons.check_circle : Icons.error_outline,
-                text: isInside ? '範圍內' : '已超出',
-                color: isInside ? const Color(0xFF28965A) : const Color(0xFFFF6670),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-// 小工具：統一資訊貼片樣式（白底+冷綠邊框）
+  // 小工具：統一資訊貼片樣式（白底+冷綠邊框）
   Widget _infoChip({required IconData icon, required String text, Color color = const Color(0xFF28965A)}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -316,6 +209,171 @@ class _NavHomePageState extends State<NavHomePage> {
     );
   }
 
+// 新增：大橫幅（警示/提示用）
+
+  Widget _noLocationView({required String name}) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF77A88D), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(20),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.location_off, color: Color(0xFFFF6670)),
+            const SizedBox(width: 10),
+            Text(
+              '$name 尚未開啟定位',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF333333),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _currentPosition == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final bool hasSafeZone = _safeZoneCenter != null && _safeZoneRadius > 0;
+    final bool canJudgeInside = _locationEnabled && hasSafeZone && _careReceiverPosition != null;
+    final bool isInside = canJudgeInside
+        ? _distanceMeters(_careReceiverPosition!, _safeZoneCenter!) <= _safeZoneRadius
+        : false;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFD8F2DA),
+      appBar: AppBar(
+        title: const Text("被照顧者位置", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        backgroundColor: const Color(0xFF28965A),
+        foregroundColor: Colors.white,
+        elevation: 2,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '設定安全範圍',
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SafeZoneSettingPage(careReceiverUid: widget.careReceiverUid),
+                ),
+              );
+              if (!mounted) return;
+              if (result is Map && result['updated'] == true) {
+                _applySafeZoneFromResult(result);
+              } else if (result == 'updated') {
+                await _loadSafeZone();
+                if (!mounted) return;
+                setState(() {});
+                if (_safeZoneCenter != null) {
+                  await _mapController?.animateCamera(
+                    CameraUpdate.newLatLngZoom(_safeZoneCenter!, 16),
+                  );
+                }
+              }
+            },
+          ),
+        ],
+      ),
+
+      // ✅ 只要未開定位 → 整頁只有提示，不渲染地圖
+      body: !_locationEnabled
+          ? _noLocationView(name:widget.careReceiverName)
+          : (_currentPosition == null)
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+        children: [
+          GoogleMap(
+            key: ValueKey(
+              'map:${_careReceiverPosition?.latitude}_${_careReceiverPosition?.longitude}_${_safeZoneCenter?.latitude}_${_safeZoneCenter?.longitude}_$_safeZoneRadius',
+            ),
+            initialCameraPosition: CameraPosition(
+              target: _currentPosition!,
+              zoom: 16,
+            ),
+            onMapCreated: (controller) {
+              _mapController = controller;
+              _tryMoveToCareReceiver();
+            },
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
+            markers: {
+              Marker(
+                markerId: const MarkerId("current"),
+                position: _currentPosition!,
+                infoWindow: const InfoWindow(title: "我的位置"),
+              ),
+              if (_careReceiverPosition != null)
+                Marker(
+                  markerId: const MarkerId("careReceiver"),
+                  position: _careReceiverPosition!,
+                  infoWindow: const InfoWindow(title: "被照顧者"),
+                  icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+                ),
+            },
+            circles: !hasSafeZone
+                ? {}
+                : {
+              Circle(
+                circleId: const CircleId("safeZone"),
+                center: _safeZoneCenter!,
+                radius: _safeZoneRadius,
+                fillColor: const Color(0xFF2CEAA3).withAlpha(48),
+                strokeColor: const Color(0xFF28965A),
+                strokeWidth: 2,
+              ),
+            },
+          ),
+
+          if (hasSafeZone)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: _infoChip(
+                icon: Icons.radar,
+                text: '半徑 ${_safeZoneRadius.toStringAsFixed(0)} m',
+              ),
+            ),
+          if (canJudgeInside)
+            Positioned(
+              top: 12,
+              left: 12,
+              child: _infoChip(
+                icon: isInside ? Icons.check_circle : Icons.error_outline,
+                text: isInside ? '範圍內' : '已超出',
+                color: isInside ? const Color(0xFF28965A) : const Color(0xFFFF6670),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+
+
 // 距離（公尺）：若你在別處已實作可沿用
   double _distanceMeters(LatLng a, LatLng b) {
     const R = 6371000.0;
@@ -327,5 +385,18 @@ class _NavHomePageState extends State<NavHomePage> {
         math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
     final c = 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h));
     return R * c;
+  }
+  @override
+  void dispose() {
+    debugPrint("🧹 NavHomePage dispose → 清理資源");
+
+    // 地圖控制器要釋放
+    _mapController?.dispose();
+    _mapController = null;
+
+    // ⚠️ 如果之後改用 Firestore .snapshots().listen()
+    // 就要在這裡 cancel 掉 subscription，避免 callback 還跑 setState
+
+    super.dispose();
   }
 }

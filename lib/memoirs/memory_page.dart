@@ -439,12 +439,12 @@ class _MemoryPageState extends State<MemoryPage> {
                                   // 圖片
                                   memory.imagePaths.isNotEmpty
                                       ? Image.network(
-                                          memory.imagePaths.first,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              Container(height: 160, color: Colors.grey[300]),
-                                        )
+                                    memory.imagePaths.first,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        Container(height: 160, color: Colors.grey[300]),
+                                  )
                                       : Container(height: 160, color: Colors.grey[200]),
                                   // 底部漸層，讓白字更清楚
                                   Positioned(

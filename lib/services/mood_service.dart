@@ -15,7 +15,7 @@ class MoodService {
 
   DocumentReference<Map<String, dynamic>> _docRefForToday() {
     return _db.collection('users').doc(uid)
-      .collection('moods').doc(todayKey);
+        .collection('moods').doc(todayKey);
   }
 
   Future<bool> hasCheckedInToday() async {

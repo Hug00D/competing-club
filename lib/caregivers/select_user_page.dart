@@ -13,6 +13,7 @@ class SelectUserPage extends StatefulWidget {
 class _SelectUserPageState extends State<SelectUserPage> {
   List<Map<String, dynamic>> _linkedUsers = [];
   bool _isLoading = true;
+  bool _navigating = false;
 
   @override
   void initState() {
@@ -33,6 +34,8 @@ class _SelectUserPageState extends State<SelectUserPage> {
       final boundUsers = (caregiverDoc.data()?['boundUsers'] as List<dynamic>? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+
+      if(!mounted) return;
 
       if (boundUsers.isEmpty) {
         setState(() {
@@ -77,7 +80,18 @@ class _SelectUserPageState extends State<SelectUserPage> {
   }
 
   void _selectUser(Map<String, dynamic> userData) {
-    Navigator.pushNamed(context, '/caregiver', arguments: userData);
+    if (_navigating) return; // 防止連點
+    _navigating = true;
+
+    Navigator.pushReplacementNamed(
+      context,
+      '/caregiver', // 這個 route 會對應到 NavHomePage
+      arguments: {
+        'uid': userData['uid'],
+        'name': userData['name'],
+        'identityCode': userData['identityCode'],
+      },
+    ).whenComplete(() => _navigating = false);
   }
 
   @override

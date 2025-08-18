@@ -1,4 +1,3 @@
-// lib/services/notification_service.dart
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -6,17 +5,17 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:android_intent_plus/android_intent.dart';
+import 'timezone_helper.dart';
 
 class NotificationService {
-  static final FlutterLocalNotificationsPlugin _plugin =
-      FlutterLocalNotificationsPlugin();
+  static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
   // 頻道
   static const String _channelId = 'main_channel';
   static const String _channelName = '主要通知頻道';
   static const String _channelDesc = '一般提醒、AI 回覆與任務提醒';
 
-  // 點擊通知的外部 handler（由 main.dart 註冊）
+  // 點擊通知時的外部 handler（由 main.dart 註冊）
   static void Function(String payload)? onTap;
   static void setOnTapHandler(void Function(String payload) handler) {
     onTap = handler;
@@ -24,24 +23,42 @@ class NotificationService {
 
   // === 初始化 ===
   static Future<void> init() async {
+    // 1) 時區：載入並設定為裝置本地時區
+    await FlutterLocalNotificationsPlugin().cancelAll();
     tz.initializeTimeZones();
+    try {
+      final localName = await TimezoneHelper.getLocalTimezone(); // 例: Asia/Taipei / America/Los_Angeles
+      tz.setLocalLocation(tz.getLocation(localName));
+      debugPrint('🕒 Timezone set to: $localName');
+    } catch (e) {
+      // ⚠️ 模擬器常會失敗，先給一個合理 fallback
+      tz.setLocalLocation(tz.getLocation('Asia/Taipei'));
+      debugPrint('🕒 Timezone fallback -> Asia/Taipei ($e)');
+    }
 
+    // 2) 通知初始化
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const settings = InitializationSettings(
-      android: androidInit,
-      iOS: iosInit,
-    );
+    const settings = InitializationSettings(android: androidInit, iOS: iosInit);
 
     await _plugin.initialize(
       settings,
       onDidReceiveNotificationResponse: _onTapForeground,
       onDidReceiveBackgroundNotificationResponse: _onTapBackground,
     );
+
+    // 3) 權限：通知 + 精準鬧鐘（Android 12+）
+    await requestNotificationPermission();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await android?.requestExactAlarmsPermission();
+
+    // 首次輸出目前 offset 狀態
+    _logOffsets(tag: 'init');
 
     debugPrint('🕒 tz.local=${tz.local}, now=${DateTime.now()}');
   }
@@ -68,14 +85,25 @@ class NotificationService {
   /// 導去 Android 精準鬧鐘授權頁（Exact Alarm）
   static Future<void> openExactAlarmSettings() async {
     if (!Platform.isAndroid) return;
-    const intent =
-        AndroidIntent(action: 'android.settings.REQUEST_SCHEDULE_EXACT_ALARM');
+    const intent = AndroidIntent(action: 'android.settings.REQUEST_SCHEDULE_EXACT_ALARM');
+    await intent.launch();
+  }
+
+  /// 開啟指定頻道設定頁（appPackage 例如 "com.yourcompany.app"）
+  static Future<void> openChannelSettings(String appPackage) async {
+    if (!Platform.isAndroid) return;
+    final intent = AndroidIntent(
+      action: 'android.settings.CHANNEL_NOTIFICATION_SETTINGS',
+      arguments: <String, dynamic>{
+        'android.provider.extra.APP_PACKAGE': appPackage,
+        'android.provider.extra.CHANNEL_ID': _channelId,
+      },
+    );
     await intent.launch();
   }
 
   // === 樣式 ===
-  static const AndroidNotificationDetails _androidDetails =
-      AndroidNotificationDetails(
+  static const AndroidNotificationDetails _androidDetails = AndroidNotificationDetails(
     _channelId,
     _channelName,
     channelDescription: _channelDesc,
@@ -84,10 +112,13 @@ class NotificationService {
     playSound: true,
     enableVibration: true,
     visibility: NotificationVisibility.public,
+    fullScreenIntent: true,                          // 直接彈出（像鬧鐘）
+    category: AndroidNotificationCategory.alarm,     // 分類：鬧鐘
+    audioAttributesUsage: AudioAttributesUsage.alarm,// 音訊用途：鬧鐘
+    icon: '@mipmap/ic_launcher',
   );
 
-  static const DarwinNotificationDetails _iosDetails =
-      DarwinNotificationDetails(
+  static const DarwinNotificationDetails _iosDetails = DarwinNotificationDetails(
     presentAlert: true,
     presentBadge: true,
     presentSound: true,
@@ -117,11 +148,12 @@ class NotificationService {
     String? payload,
   }) async {
     final fixed = _normalizeFutureTime(when);
+    _logOffsets(tag: 'scheduleExact');
     await _plugin.zonedSchedule(
       id,
       title,
       body,
-      tz.TZDateTime.from(fixed, tz.local),
+      _toSafeTz(fixed),
       _platformDetails,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: payload,
@@ -140,11 +172,12 @@ class NotificationService {
     String? payload,
   }) async {
     final fixed = _normalizeFutureTime(when);
+    _logOffsets(tag: 'scheduleAlarmClock');
     await _plugin.zonedSchedule(
       id,
       title,
       body,
-      tz.TZDateTime.from(fixed, tz.local),
+      _toSafeTz(fixed),
       _platformDetails,
       androidScheduleMode: AndroidScheduleMode.alarmClock,
       payload: payload,
@@ -154,7 +187,7 @@ class NotificationService {
     await debugPending();
   }
 
-  /// 保底邏輯（在新版等同呼叫一次 exact；需要更強保底，可自行加第二筆 alarmClock）
+  /// 保底邏輯：Exact + 立刻補一條 AlarmClock（+1s，避免同秒衝突）
   static Future<void> scheduleWithFallback({
     required int id,
     required String title,
@@ -162,13 +195,38 @@ class NotificationService {
     required DateTime when,
     String? payload,
   }) async {
-    await scheduleExact(
-      id: id,
-      title: title,
-      body: body,
-      when: when,
+    final fixed = _normalizeFutureTime(when);
+    _logOffsets(tag: 'scheduleWithFallback');
+
+    // 1) 先排 EXACT
+    await _plugin.zonedSchedule(
+      id,
+      title,
+      body,
+      _toSafeTz(fixed),
+      _platformDetails,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: payload,
+      matchDateTimeComponents: null,
     );
+    debugPrint('✅ [Exact] $id @ $fixed');
+
+    // 2) 立刻補一條 ALARM_CLOCK（+1s、避免同秒衝突）
+    final fallbackId = id + 100000;
+    final fallbackWhen = fixed.add(const Duration(seconds: 1));
+    await _plugin.zonedSchedule(
+      fallbackId,
+      title,
+      '$body（保底）',
+      _toSafeTz(fallbackWhen),
+      _platformDetails,
+      androidScheduleMode: AndroidScheduleMode.alarmClock,
+      payload: payload,
+      matchDateTimeComponents: null,
+    );
+    debugPrint('🛟 [AlarmClock Fallback] $fallbackId @ $fallbackWhen');
+
+    await debugPending();
   }
 
   // === 重複排程（每日／每週） ===
@@ -182,6 +240,7 @@ class NotificationService {
   }) async {
     final now = tz.TZDateTime.now(tz.local);
     final next = _nextDailyTime(now, hour, minute);
+    // 這裡 next 已是 TZDateTime，無需再做安全轉換
     await _plugin.zonedSchedule(
       id,
       title,
@@ -234,6 +293,29 @@ class NotificationService {
   }
 
   // === Helpers ===
+
+  /// 將「牆上時間」安全轉為 TZDateTime。
+  /// 若 Dart 與 tz.local 的 offset 一致 → 用 TZDateTime.from；
+  /// 若不一致（常見於 emulator 時區/設定）→ 視為「相對現在的時長」避免時區錯位。
+  static tz.TZDateTime _toSafeTz(DateTime when) {
+    final nowLocal = DateTime.now();
+    final nowTz = tz.TZDateTime.now(tz.local);
+    final offsetsMatch = nowLocal.timeZoneOffset == nowTz.timeZoneOffset;
+
+    if (offsetsMatch) {
+      return tz.TZDateTime.from(when, tz.local);
+    } else {
+      final delta = when.difference(nowLocal);
+      return nowTz.add(delta);
+    }
+  }
+
+  static void _logOffsets({String tag = ''}) {
+    final dartOffset = DateTime.now().timeZoneOffset;
+    final tzOffset = tz.TZDateTime.now(tz.local).timeZoneOffset;
+    debugPrint('⏱️ offsets[$tag]: dart=$dartOffset tz=$tzOffset match=${dartOffset == tzOffset}');
+  }
+
   static DateTime _normalizeFutureTime(DateTime when) {
     final now = DateTime.now();
     // 避免「立刻或過去」造成錯過排程 → 至少 +2 秒
@@ -243,20 +325,17 @@ class NotificationService {
     return when;
   }
 
-  static tz.TZDateTime _nextDailyTime(
-      tz.TZDateTime now, int hour, int minute) {
+  static tz.TZDateTime _nextDailyTime(tz.TZDateTime now, int hour, int minute) {
     var next = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
     if (next.isBefore(now)) next = next.add(const Duration(days: 1));
     return next;
   }
 
   /// weekday: 1=Mon ... 7=Sun
-  static tz.TZDateTime _nextWeeklyTime(
-      tz.TZDateTime now, int weekday, int hour, int minute) {
+  static tz.TZDateTime _nextWeeklyTime(tz.TZDateTime now, int weekday, int hour, int minute) {
     var daysToAdd = (weekday - now.weekday) % 7;
     if (daysToAdd == 0) {
-      final today =
-          tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+      final today = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
       if (today.isAfter(now)) return today;
       daysToAdd = 7;
     }
@@ -265,8 +344,7 @@ class NotificationService {
   }
 
   // === Backward-compat 別名（給舊呼叫保留） ===
-  static Future<void> requestExactAlarmPermission() =>
-      openExactAlarmSettings();
+  static Future<void> requestExactAlarmPermission() => openExactAlarmSettings();
 
   static Future<void> scheduleExactNotification({
     required int id,

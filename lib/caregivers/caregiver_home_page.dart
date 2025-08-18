@@ -1,48 +1,69 @@
 import 'package:flutter/material.dart';
-import 'package:memory/memoirs/memory_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import 'caregiver_session.dart';           // ✅ 全域 Session
 import '../pages/user_task_page.dart';
 import 'task_statistics_page.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'caregiver_session.dart';  // ✅ 使用全域 Session
+import 'package:memory/memoirs/memory_page.dart';
 
-class CaregiverHomePage extends StatelessWidget {
+class CaregiverHomePage extends StatefulWidget {
+  /// 可選的直接注入資料（例如從上一頁用 constructor 帶進來）
   final Map<String, dynamic>? userData;
 
   const CaregiverHomePage({super.key, this.userData});
 
   @override
-  Widget build(BuildContext context) {
+  State<CaregiverHomePage> createState() => _CaregiverHomePageState();
+}
+
+class _CaregiverHomePageState extends State<CaregiverHomePage> {
+  bool _inited = false;
+
+  /// 將 route arguments / constructor 的 userData 同步進 CaregiverSession
+  void _ingestArgsOnce(BuildContext context) {
+    if (_inited) return;
+    _inited = true;
+
+    // 1) 命名路由帶來的 arguments
     final routeData = ModalRoute.of(context)?.settings.arguments;
+    if (routeData is Map<String, dynamic>) {
+      final uid = routeData['selectedCareReceiverUid'] ?? routeData['uid'];
+      final name = routeData['selectedCareReceiverName'] ?? routeData['name'];
+      final identityCode =
+          routeData['selectedCareReceiverIdentityCode'] ?? routeData['identityCode'];
 
-    if (routeData != null && routeData is Map<String, dynamic>) {
-      if (routeData['selectedCareReceiverUid'] != null) {
-        CaregiverSession.selectedCareReceiverUid = routeData['selectedCareReceiverUid'];
-      }
-      if (routeData['selectedCareReceiverName'] != null) {
-        CaregiverSession.selectedCareReceiverName = routeData['selectedCareReceiverName'];
-      }
-      if (routeData['selectedCareReceiverIdentityCode'] != null) {
-        CaregiverSession.selectedCareReceiverIdentityCode = routeData['selectedCareReceiverIdentityCode'];
+      if (uid != null) CaregiverSession.selectedCareReceiverUid = uid;
+      if (name != null) CaregiverSession.selectedCareReceiverName = name;
+      if (identityCode != null) {
+        CaregiverSession.selectedCareReceiverIdentityCode = identityCode;
       }
     }
 
-    if (userData != null) {
-      if (userData!['uid'] != null) {
-        CaregiverSession.selectedCareReceiverUid = userData!['uid'];
+    // 2) 透過建構子直接帶入的 userData（若有）
+    final data = widget.userData;
+    if (data != null) {
+      if (data['uid'] != null) {
+        CaregiverSession.selectedCareReceiverUid = data['uid'];
       }
-      if (userData!['name'] != null) {
-        CaregiverSession.selectedCareReceiverName = userData!['name'];
+      if (data['name'] != null) {
+        CaregiverSession.selectedCareReceiverName = data['name'];
       }
-      if (userData!['identityCode'] != null) {
-        CaregiverSession.selectedCareReceiverIdentityCode = userData!['identityCode'];
+      if (data['identityCode'] != null) {
+        CaregiverSession.selectedCareReceiverIdentityCode = data['identityCode'];
       }
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 僅首次進頁把參數寫入 Session
+    _ingestArgsOnce(context);
 
     final String name = CaregiverSession.selectedCareReceiverName ?? '未命名';
     final String identityCode = CaregiverSession.selectedCareReceiverIdentityCode ?? '無代碼';
+    final String? selectedUid = CaregiverSession.selectedCareReceiverUid;
 
     return Scaffold(
-      // ✅ 背景改為漸層綠
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -57,7 +78,7 @@ class CaregiverHomePage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ✅ AppBar 改為自訂樣式
+                // 自訂 AppBar
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -73,13 +94,18 @@ class CaregiverHomePage extends StatelessWidget {
                       icon: const Icon(Icons.switch_account, color: Color(0xFF2E7D32)),
                       tooltip: '切換查看對象',
                       onPressed: () {
-                        Navigator.pushNamed(context, '/selectUser');
+                        // ✅ 用 replacement，避免舊頁殘留（更穩）
+                        Navigator.pushReplacementNamed(context, '/selectUser');
                       },
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 20),
+
                 _buildInfoCard(name, identityCode),
+
+                // 個人檔案
                 _buildMenuCard(
                   context,
                   icon: Icons.person,
@@ -89,6 +115,7 @@ class CaregiverHomePage extends StatelessWidget {
                     Navigator.pushNamed(context, '/careProfile');
                   },
                 ),
+
                 const SizedBox(height: 24),
                 const Text(
                   '功能選單',
@@ -96,20 +123,24 @@ class CaregiverHomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // ✅ 功能卡片們（綠為主，藍為輔）
+                // 查看任務行事曆
                 _buildMenuCard(
                   context,
                   icon: Icons.calendar_today,
                   label: '查看任務行事曆',
                   color: const Color(0xFF4CAF50),
                   onTap: () {
+                    if (selectedUid == null) {
+                      _showPickUserSnackBar(context);
+                      return;
+                    }
                     final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
-                    final caregiverName = '照顧者';
+                    const caregiverName = '照顧者';
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => UserTaskPage(
-                          targetUid: CaregiverSession.selectedCareReceiverUid!,
+                          targetUid: selectedUid,
                         ),
                         settings: RouteSettings(arguments: {
                           'fromCaregiver': true,
@@ -120,19 +151,25 @@ class CaregiverHomePage extends StatelessWidget {
                     );
                   },
                 ),
+
+                // 查看回憶錄
                 _buildMenuCard(
                   context,
                   icon: Icons.photo_library,
                   label: '查看回憶錄',
                   color: const Color(0xFF64B5F6),
                   onTap: () {
+                    if (selectedUid == null) {
+                      _showPickUserSnackBar(context);
+                      return;
+                    }
                     final caregiverUid = FirebaseAuth.instance.currentUser?.uid;
-                    final caregiverName = '照顧者';
+                    const caregiverName = '照顧者';
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => MemoryPage(
-                          targetUid: CaregiverSession.selectedCareReceiverUid!,
+                          targetUid: selectedUid,
                         ),
                         settings: RouteSettings(arguments: {
                           'fromCaregiver': true,
@@ -143,36 +180,49 @@ class CaregiverHomePage extends StatelessWidget {
                     );
                   },
                 ),
+
+                // 查看任務完成率
                 _buildMenuCard(
                   context,
                   icon: Icons.bar_chart,
                   label: '查看任務完成率',
                   color: const Color(0xFF81C784),
                   onTap: () {
+                    if (selectedUid == null) {
+                      _showPickUserSnackBar(context);
+                      return;
+                    }
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => TaskStatisticsPage(
-                          targetUid: CaregiverSession.selectedCareReceiverUid!,
+                          targetUid: selectedUid,
                           targetName: CaregiverSession.selectedCareReceiverName ?? '未命名',
                         ),
                       ),
                     );
                   },
                 ),
+
+                // 查看定位地圖
                 _buildMenuCard(
                   context,
                   icon: Icons.location_on,
                   label: '查看定位地圖',
                   color: const Color(0xFF1976D2),
                   onTap: () {
+                    if (selectedUid == null) {
+                      _showPickUserSnackBar(context);
+                      return;
+                    }
                     Navigator.pushNamed(
                       context,
                       '/map',
                       arguments: {
                         'selectedCareReceiverUid': CaregiverSession.selectedCareReceiverUid,
                         'selectedCareReceiverName': CaregiverSession.selectedCareReceiverName,
-                        'selectedCareReceiverIdentityCode': CaregiverSession.selectedCareReceiverIdentityCode,
+                        'selectedCareReceiverIdentityCode':
+                        CaregiverSession.selectedCareReceiverIdentityCode,
                       },
                     );
                   },
@@ -184,6 +234,8 @@ class CaregiverHomePage extends StatelessWidget {
       ),
     );
   }
+
+  // --- UI widgets ---
 
   Widget _buildInfoCard(String name, String identityCode) {
     return Container(
@@ -203,12 +255,13 @@ class CaregiverHomePage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('當前查看對象：',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+          const Text(
+            '當前查看對象：',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+          ),
           const SizedBox(height: 8),
           Text('姓名：$name', style: const TextStyle(fontSize: 16, color: Colors.black)),
-          Text('識別碼：$identityCode',
-              style: const TextStyle(fontSize: 16, color: Colors.black)),
+          Text('識別碼：$identityCode', style: const TextStyle(fontSize: 16, color: Colors.black)),
         ],
       ),
     );
@@ -250,7 +303,11 @@ class CaregiverHomePage extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
                 ),
               ),
               const Icon(Icons.arrow_forward_ios, size: 18, color: Colors.grey),
@@ -261,4 +318,9 @@ class CaregiverHomePage extends StatelessWidget {
     );
   }
 
+  void _showPickUserSnackBar(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('請先選擇要查看的被照顧者')),
+    );
+  }
 }

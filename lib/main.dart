@@ -100,8 +100,9 @@ class MemoryAssistantApp extends StatelessWidget {
         if (settings.name == '/map') {
           final args = (settings.arguments ?? const <String, dynamic>{}) as Map<String, dynamic>;
           final careReceiverUid = args['selectedCareReceiverUid'] ?? '';
+          final careReceiverName = args['selectedCareReceiverName'] ?? '未命名';
           return MaterialPageRoute(
-            builder: (_) => NavHomePage(careReceiverUid: careReceiverUid),
+            builder: (_) => NavHomePage(careReceiverUid: careReceiverUid, careReceiverName: careReceiverName),
           );
         }
         return null;

@@ -68,13 +68,13 @@ class _MoodCheckinSheetState extends State<MoodCheckinSheet> {
                         onPressed: (_selectedMood == null)
                             ? null
                             : () {
-                                FocusScope.of(context).unfocus();
-                                final note = _ctrl.text.trim();
-                                widget.onSubmit(
-                                  _selectedMood!,
-                                  note.isEmpty ? null : note,
-                                );
-                              },
+                          FocusScope.of(context).unfocus();
+                          final note = _ctrl.text.trim();
+                          widget.onSubmit(
+                            _selectedMood!,
+                            note.isEmpty ? null : note,
+                          );
+                        },
                         child: const Text(
                           '完成',
                           style: TextStyle(
@@ -117,7 +117,7 @@ class _MoodCheckinSheetState extends State<MoodCheckinSheet> {
                             ),
                             onPressed: () {
                               setState(() => _selectedMood =
-                                  selected ? null : label); // 點同一顆可取消
+                              selected ? null : label); // 點同一顆可取消
                             },
                             child: Column(
                               children: [
@@ -162,7 +162,7 @@ class _MoodCheckinSheetState extends State<MoodCheckinSheet> {
                         color: Color(0xFF5E6A7D), // 提示字顏色更深
                       ),
                       contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(color: Color(0xFFE0E6F1)),
