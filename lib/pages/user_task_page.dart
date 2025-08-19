@@ -10,6 +10,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:memory/caregivers/caregiver_session.dart';
 //import 'package:memory/services/notification_service.dart';
 
+const _gradStart = Color(0xFF62C2FF); // 藍
+const _gradEnd   = Color(0xFF59F2D8); // 綠
+const _headerBg  = Color(0xFFF5F7FB);
 
 Future<void> uploadTasksToFirebase(Map<String, List<Map<String, String>>> taskMap, String uid) async {
   final user = FirebaseAuth.instance.currentUser;
@@ -578,72 +581,99 @@ class _UserTaskPageState extends State<UserTaskPage> {
     final tasks = taskMap[key] ?? [];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: _headerBg,
       body: Column(
         children: [
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          // ====== 漸層頂部區 ======
+          Container(
+            padding: const EdgeInsets.only(top: 48, left: 16, right: 16, bottom: 16),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_gradStart, _gradEnd],
+              ),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+            ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.calendar_today, color: Colors.black87),
+                  icon: const Icon(Icons.calendar_month, color: Colors.white, size: 24),
                   onPressed: _openMonthlyCalendar,
                 ),
-                const Text(
-                  '語音任務清單',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '語音任務清單',
+                    style: TextStyle(
+                        color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                  ),
                 ),
-                TextButton(
+                // 今日膠囊按鈕
+                  TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                    backgroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    elevation: 3,
+                  ),
                   onPressed: _jumpToToday,
-                  child: const Text("今日", style: TextStyle(color: Colors.blueGrey)),
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF62C2FF), Color(0xFF59F2D8)],
+                    ).createShader(bounds),
+                    child: const Text(
+                      '今日',
+                      style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white, // shader 會覆蓋掉這個
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 6),
 
+          // ====== 圓形日期選擇器 + 右側 + 號 ======
           Stack(
-            alignment: Alignment.bottomRight, // 改成右下角
             children: [
-              Center(child: _buildDateSelector()),
-              Align(
-                alignment: Alignment.bottomRight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: FloatingActionButton(
-                    heroTag: 'addBtn',
-                    backgroundColor: Colors.black,
-                    onPressed: _addTask,
-                    child: const Icon(Icons.add, color: Colors.white),
-                  ),
+              Align(alignment: Alignment.center, child: _buildDateSelector()),
+              Positioned(
+                right: 16,
+                bottom: 8,
+                child: _SquareGradientFab(
+                  icon: Icons.add,
+                  onTap: _addTask,
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 12),
-
+          // ====== 內容卡片區（白底、圓角）======
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
               ),
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.symmetric(vertical: 24),
+                padding: const EdgeInsets.symmetric(vertical: 20),
                 itemCount: 24,
                 itemBuilder: (context, hour) {
                   final paddedHour = hour.toString().padLeft(2, '0');
                   final hourStr = "$paddedHour:00";
+
                   final now = DateTime.now();
-                  final selectedDateString = DateFormat('yyyy-MM-dd').format(selectedDate);
-                  final todayString = DateFormat('yyyy-MM-dd').format(now);
-                  final isBeforeToday = selectedDate.isBefore(DateTime(now.year, now.month, now.day));
-                  final isToday = selectedDateString == todayString;
-                  final hourStart = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, hour);
+                  final isBeforeToday = DateTime(
+                      selectedDate.year, selectedDate.month, selectedDate.day)
+                      .isBefore(DateTime(now.year, now.month, now.day));
+                  final isToday = DateFormat('yyyy-MM-dd').format(selectedDate) ==
+                      DateFormat('yyyy-MM-dd').format(now);
+                  final hourStart = DateTime(
+                      selectedDate.year, selectedDate.month, selectedDate.day, hour);
                   final hourEnd = hourStart.add(const Duration(hours: 1));
                   final isHourPast = isBeforeToday || (isToday && now.isAfter(hourEnd));
 
@@ -659,91 +689,28 @@ class _UserTaskPageState extends State<UserTaskPage> {
                         Text(
                           hourStr,
                           style: TextStyle(
-                            color: isHourPast ? Colors.grey : Colors.black87,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
+                              color: isHourPast ? Colors.grey : Colors.black87,
+                              fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                         if (taskForHour.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              '— 無任務 —',
-                              style: TextStyle(color: isHourPast ? Colors.grey : Colors.black54),
-                            ),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 6),
+                            child: Text('— 無任務 —', style: TextStyle(color: Colors.black45)),
                           ),
-                        ...taskForHour.map((t) {
-                          final now = TimeOfDay.now();
-                          final taskTime = TimeOfDay(
-                            hour: int.tryParse(t['time']?.split(':')[0] ?? '0') ?? 0,
-                            minute: int.tryParse(t['time']?.split(':')[1] ?? '0') ?? 0,
-                          );
-                          final isPast = taskTime.hour < now.hour || (taskTime.hour == now.hour && taskTime.minute < now.minute);
-                          final isCompleted = t['completed'] == 'true';
-
-                          Color titleColor;
-                          if (isPast && !isCompleted) {
-                            titleColor = Colors.redAccent;
-                          } else if (isPast && isCompleted) {
-                            titleColor = Colors.green;
-                          } else {
-                            titleColor = Colors.black87;
-                          }
-
-                          return Card(
-                            color: _getColorByType(t['type']),
-                            elevation: 3,
-                            margin: const EdgeInsets.only(top: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListTile(
-                              onTap: () => flutterTts.speak("${t['task']}，從 ${t['time']} 到 ${t['end']}"),
-                              leading: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _getIconByType(t['type']),
-                                  Checkbox(
-                                    value: isCompleted,
-                                    onChanged: (value) {
-                                      if (value != null) {
-                                        _toggleTaskCompletion(t, value);
-                                      }
-                                    },
-                                    side: WidgetStateBorderSide.resolveWith((states) {
-                                      if (states.contains(WidgetState.selected)) {
-                                        return const BorderSide(color: Colors.green, width: 2);
-                                      }
-                                      return const BorderSide(color: Colors.black54, width: 2);
-                                    }),
-                                    fillColor: WidgetStateProperty.resolveWith((states) {
-                                      if (states.contains(WidgetState.selected)) {
-                                        return Colors.blue;
-                                      }
-                                      return Colors.transparent;
-                                    }),
-                                    checkColor: Colors.white,
-                                  ),
-
-                                ],
-                              ),
-                              title: Text(
-                                t['task'] ?? '',
-                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: titleColor),
-                              ),
-                              subtitle: Text('${t['time']} ~ ${t['end']}', style: const TextStyle(color: Colors.grey)),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                onPressed: () async {
-                                  final index = tasks.indexOf(t);
-                                  await _deleteTask(index);
-                                },
-                              ),
-                            ),
-                          );
-                        }),
-                        if (hour == 23)
-                          const SizedBox(height: 50),
+                        ...taskForHour.map((t) => _TaskTile(
+                          task: t,
+                          isHourPast: isHourPast,
+                          // 下面兩個回調請換成你的實作
+                          onToggle: (v) => _toggleTaskCompletion(t, v),
+                          onDelete: () async {
+                            final index = tasks.indexOf(t);
+                            await _deleteTask(index);
+                          },
+                          getIconByType: _getIconByType,
+                          getColorByType: _getColorByType,
+                          speak: (s) => flutterTts.speak(s),
+                        )),
+                        if (hour == 23) const SizedBox(height: 50),
                       ],
                     ),
                   );
@@ -753,11 +720,11 @@ class _UserTaskPageState extends State<UserTaskPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'menuBtn',
-        backgroundColor: Colors.black,
-        onPressed: _showCustomMenu,
-        child: const Icon(Icons.menu, color: Colors.white),
+
+      // 右下彩色功能選單 FAB
+      floatingActionButton: _CircleGradientFab(
+        icon: Icons.menu,
+        onTap: _showCustomMenu,
       ),
     );
   }
@@ -769,31 +736,36 @@ class _UserTaskPageState extends State<UserTaskPage> {
     final weekStr = weekday[selectedDate.weekday % 7];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       child: Stack(
         alignment: Alignment.center,
         children: [
           Container(
-            width: 245,
-            height: 245,
-            decoration: const BoxDecoration(
+            width: 250,
+            height: 250,
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 16, offset: Offset(0, 6))],
+              border: Border.all(color: Colors.white, width: 2),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('$monthStr 月', style: const TextStyle(fontSize: 22, color: Colors.black87)),
-                const SizedBox(height: 4),
-                Text(dayStr, style: const TextStyle(fontSize: 72, fontWeight: FontWeight.bold, color: Colors.black)),
-                const SizedBox(height: 4),
-                Text(weekStr, style: const TextStyle(fontSize: 22, color: Colors.black87)),
+                Text('$monthStr 月', style: const TextStyle(fontSize: 20, color: Colors.black87)),
+                const SizedBox(height: 6),
+                Text(
+                  dayStr,
+                  style: const TextStyle(fontSize: 74, fontWeight: FontWeight.w800, color: Colors.black),
+                ),
+                const SizedBox(height: 6),
+                Text(weekStr, style: const TextStyle(fontSize: 20, color: Colors.black87)),
               ],
             ),
           ),
+          // 左：上一天
           Positioned(
-            left: 10,
+            left: 6,
             child: Column(
               children: [
                 IconButton(
@@ -805,8 +777,9 @@ class _UserTaskPageState extends State<UserTaskPage> {
               ],
             ),
           ),
+          // 右：下一天
           Positioned(
-            right: 10,
+            right: 6,
             child: Column(
               children: [
                 IconButton(
@@ -819,6 +792,145 @@ class _UserTaskPageState extends State<UserTaskPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ======= 下面兩個 FAB 是純樣式元件 =======
+
+  // 右側方形 + FAB（漸層、圓角大）
+  // ignore: unused_element
+  Widget _squareAddFab(VoidCallback onTap) => _SquareGradientFab(icon: Icons.add, onTap: onTap);
+}
+
+// —————————— 小元件們 ——————————
+
+class _SquareGradientFab extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _SquareGradientFab({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      elevation: 6,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [_gradStart, _gradEnd]),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Center(child: Icon(icon, color: Colors.white)),
+        ),
+      ),
+    );
+  }
+}
+
+class _CircleGradientFab extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _CircleGradientFab({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 8,
+      shape: const CircleBorder(),
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Ink(
+          width: 58,
+          height: 58,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(colors: [_gradStart, _gradEnd]),
+          ),
+          child: Center(child: Icon(icon, color: Colors.white)),
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskTile extends StatelessWidget {
+  final Map<String, String> task;
+  final bool isHourPast;
+  final void Function(bool) onToggle;
+  final VoidCallback onDelete;
+  final Widget Function(String?) getIconByType;
+  final Color Function(String?) getColorByType;
+  final void Function(String) speak;
+
+  const _TaskTile({
+    required this.task,
+    required this.isHourPast,
+    required this.onToggle,
+    required this.onDelete,
+    required this.getIconByType,
+    required this.getColorByType,
+    required this.speak,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = TimeOfDay.now();
+    final taskTime = TimeOfDay(
+      hour: int.tryParse(task['time']?.split(':')[0] ?? '0') ?? 0,
+      minute: int.tryParse(task['time']?.split(':')[1] ?? '0') ?? 0,
+    );
+    final isPast = taskTime.hour < now.hour ||
+        (taskTime.hour == now.hour && taskTime.minute < now.minute);
+    final isCompleted = task['completed'] == 'true';
+
+    Color titleColor;
+    if (isPast && !isCompleted) {
+      titleColor = Colors.redAccent;
+    } else if (isPast && isCompleted) {
+      titleColor = Colors.green;
+    } else {
+      titleColor = Colors.black87;
+    }
+
+    return Card(
+      color: getColorByType(task['type']),
+      elevation: 3,
+      margin: const EdgeInsets.only(top: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        onTap: () => speak("${task['task']}，從 ${task['time']} 到 ${task['end']}"),
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            getIconByType(task['type']),
+            Checkbox(
+              value: isCompleted,
+              onChanged: (v) => onToggle(v ?? false),
+              side: const BorderSide(color: Colors.black54, width: 2),
+              fillColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) return Colors.blue;
+                return Colors.transparent;
+              }),
+              checkColor: Colors.white,
+            ),
+          ],
+        ),
+        title: Text(task['task'] ?? '',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: titleColor)),
+        subtitle: Text('${task['time']} ~ ${task['end']}',
+            style: const TextStyle(color: Colors.black54)),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete, color: Colors.redAccent),
+          onPressed: onDelete,
+        ),
       ),
     );
   }
