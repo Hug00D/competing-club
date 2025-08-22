@@ -181,7 +181,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                                 fontWeight: FontWeight.w700,
                                 color: deepBlue)),
                         const SizedBox(height: 6),
-                        Text(note!,
+                        Text(note,
                             style: const TextStyle(
                                 fontSize: 16, color: Colors.black87)),
                       ],
@@ -272,40 +272,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
       default:
         return '我今天心情愉悅（樂）$extra。請跟我聊聊今天最放鬆的時刻，並提供一個能維持好心情的小習慣。';
     }
-  }
-
-  Future<void> _openMoodTester() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('尚未登入，無法測試心情打卡')),
-        );
-      }
-      return;
-    }
-
-    final moodService = MoodService(user.uid);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => MoodCheckinSheet(
-        onSubmit: (mood, note) async {
-          await moodService.saveMood(mood, note: note);
-          if (!mounted) return;
-          if (context.mounted) Navigator.pop(context);
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('（測試）已記錄今天的心情')),
-            );
-          }
-          _askToChat(mood, note);
-        },
-      ),
-    );
   }
 
   @override
