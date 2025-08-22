@@ -1,13 +1,25 @@
-import 'dart:io'; // 👈 新增：用來判斷 Android
+// ================================
+// file: pages/main_menu_page.dart
+// Uber-style Home overview with 2×2 tools grid + horizontal overview cards
+// Keeps your: LocationUploader, Exact Alarm prompt, Mood check-in flow
+// Depends on: widgets/home_overview_cards.dart
+// Routes used: '/ai', '/profile' and MemoryPage/UserTaskPage as before
+// =================================
+
+import 'dart:io';
 import 'package:flutter/material.dart';
-import '../memoirs/memory_page.dart';
-import 'user_task_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import '../memoirs/memory_page.dart';
+import 'user_task_page.dart';
+
 import 'package:memory/services/notification_service.dart';
 import 'package:memory/services/location_uploader.dart';
-import 'package:memory/services/mood_service.dart';            // ✅ 你原本新增
-import 'package:memory/pages/mood_checkin_sheet.dart';       // ✅ 你原本新增
+import 'package:memory/services/mood_service.dart';
+import 'package:memory/pages/mood_checkin_sheet.dart';
+
+import '../widgets/home_overview_cards.dart';
 
 class MainMenuPage extends StatefulWidget {
   final String userRole;
@@ -19,39 +31,35 @@ class MainMenuPage extends StatefulWidget {
 
 class _MainMenuPageState extends State<MainMenuPage> {
   bool _askedToday = false;
-  bool _askedExactAlarmPrompt = false; // 👈 新增：本次啟動僅提示一次
+  bool _askedExactAlarmPrompt = false;
 
   @override
   void initState() {
     super.initState();
-    LocationUploader().start(); // ✅ 啟動位置上傳
-    // 等第一幀 build 完成後再檢查／提示，避免啟動時直接跳系統頁造成黑屏
+    LocationUploader().start();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _maybePromptExactAlarm(); // 👈 新增：權限引導
-      await _maybeAskMood();          // 你原本的心情打卡流程
+      await _maybePromptExactAlarm();
+      await _maybeAskMood();
     });
   }
 
   @override
   void dispose() {
-    LocationUploader().stop(); // ✅ 停止監聽位置
+    LocationUploader().stop();
     super.dispose();
   }
 
-  // 👇 新增：只在畫面出來後，以 bottom sheet 引導「精準鬧鐘」權限，不自動跳系統頁
   Future<void> _maybePromptExactAlarm() async {
     if (!mounted) return;
     if (!Platform.isAndroid) return;
-    if (_askedExactAlarmPrompt) return; // 本次啟動只提示一次
+    if (_askedExactAlarmPrompt) return;
     _askedExactAlarmPrompt = true;
 
-    // 可以在這裡加你自己的條件判斷（例如偵測排程是否被抑制等）
-    // 這裡先單純提示一次
     await showModalBottomSheet(
       context: context,
       isScrollControlled: false,
       backgroundColor: Colors.transparent,
-      builder: (_) => _ExactAlarmPromptSheet(),
+      builder: (_) => const _ExactAlarmPromptSheet(),
     );
   }
 
@@ -64,27 +72,20 @@ class _MainMenuPageState extends State<MainMenuPage> {
     final already = await moodService.hasCheckedInToday();
     if (!already && !_askedToday) {
       _askedToday = true;
-
       if (!mounted) return;
       showModalBottomSheet(
         context: context,
         isScrollControlled: false,
         backgroundColor: Colors.transparent,
         builder: (_) => MoodCheckinSheet(
-          // ✅ 這裡接「心情 + 可選的 note」
           onSubmit: (mood, note) async {
             await moodService.saveMood(mood, note: note);
             if (!mounted) return;
-
             if (!context.mounted) return;
-            Navigator.pop(context); // 先關掉底部面板
-
-            // （可選）小小的提示
+            Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('已記錄今天的心情')),
             );
-
-            // ✅ 存完再問要不要聊聊
             _askToChat(mood, note);
           },
         ),
@@ -123,25 +124,30 @@ class _MainMenuPageState extends State<MainMenuPage> {
       builder: (ctx) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               boxShadow: const [
-                BoxShadow(color: Color(0x33000000), blurRadius: 20, offset: Offset(0, 8)),
+                BoxShadow(
+                    color: Color(0x33000000),
+                    blurRadius: 20,
+                    offset: Offset(0, 8)),
               ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 漸層標頭
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
                   decoration: const BoxDecoration(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(20)),
                     gradient: LinearGradient(
                       colors: [brandBlue, brandGreen],
                       begin: Alignment.centerLeft,
@@ -157,53 +163,60 @@ class _MainMenuPageState extends State<MainMenuPage> {
                     ),
                   ),
                 ),
-
-                // 內容
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('你今天的心情：$mood $emoji',
-                          style: const TextStyle(fontSize: 18, color: deepBlue, fontWeight: FontWeight.w700)),
+                          style: const TextStyle(
+                              fontSize: 18,
+                              color: deepBlue,
+                              fontWeight: FontWeight.w700)),
                       if (hasNote) ...[
                         const SizedBox(height: 10),
                         const Text('發生了什麼：',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: deepBlue)),
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: deepBlue)),
                         const SizedBox(height: 6),
-                        Text(note, style: const TextStyle(fontSize: 16, color: Colors.black87)),
+                        Text(note!,
+                            style: const TextStyle(
+                                fontSize: 16, color: Colors.black87)),
                       ],
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 6),
-
-                // 底部按鈕列
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Row(
                     children: [
-                      // 左側：次要按鈕
                       Expanded(
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 12),
                             side: const BorderSide(color: deepBlue),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                           onPressed: () => Navigator.of(ctx).pop(false),
                           child: const Text('不用，謝謝',
-                              style: TextStyle(fontSize: 16, color: deepBlue, fontWeight: FontWeight.w700)),
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  color: deepBlue,
+                                  fontWeight: FontWeight.w700)),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // 右側：主按鈕（漸層）
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                             backgroundColor: Colors.transparent,
                             shadowColor: Colors.transparent,
                           ),
@@ -215,13 +228,17 @@ class _MainMenuPageState extends State<MainMenuPage> {
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
                               ),
-                              borderRadius: BorderRadius.all(Radius.circular(12)),
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(12)),
                             ),
                             child: const SizedBox(
                               height: 48,
                               child: Center(
                                 child: Text('好，現在聊',
-                                    style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w800)),
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800)),
                               ),
                             ),
                           ),
@@ -276,7 +293,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
       backgroundColor: Colors.transparent,
       builder: (_) => MoodCheckinSheet(
         onSubmit: (mood, note) async {
-          await moodService.saveMood(mood, note: note); // 一樣寫入今天的紀錄
+          await moodService.saveMood(mood, note: note);
           if (!mounted) return;
           if (context.mounted) Navigator.pop(context);
 
@@ -285,8 +302,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
               const SnackBar(content: Text('（測試）已記錄今天的心情')),
             );
           }
-
-          // 跟正式流程一樣：先問要不要聊聊
           _askToChat(mood, note);
         },
       ),
@@ -299,7 +314,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFE0F7FA), Color(0xFFE0F2F1)],
+            colors: [Color(0xFFEAF3FF), Color(0xFFE0F7F4)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -308,76 +323,34 @@ class _MainMenuPageState extends State<MainMenuPage> {
           child: Column(
             children: [
               _buildHeader(context),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              _buildQuickChips(context),
+              const SizedBox(height: 4),
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
-                    _buildMenuCard(
-                      context,
-                      icon: Icons.calendar_today,
-                      label: '行事曆',
-                      color: const Color(0xFF4FC3F7),
-                      onTap: () => Navigator.push(
+                    const SizedBox(height: 8),
+                    _buildToolsGrid(context),
+                    const SizedBox(height: 12),
+                    // Overview Cards (Uber 廣告區 → 速覽)
+                    OverviewCards(
+                      onOpenAI: () => Navigator.pushNamed(context, '/ai'),
+                      onOpenCalendar: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const UserTaskPage()),
                       ),
-                    ),
-                    _buildMenuCard(
-                      context,
-                      icon: Icons.photo_album,
-                      label: '回憶錄',
-                      color: const Color(0xFFBA68C8),
-                      onTap: () => Navigator.push(
+                      onOpenMemories: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const MemoryPage()),
                       ),
                     ),
-                    _buildMenuCard(
-                      context,
-                      icon: Icons.person,
-                      label: '個人檔案',
-                      color: const Color(0xFF7986CB),
-                      onTap: () => Navigator.pushNamed(context, '/profile'),
-                    ),
-                    _buildMenuCard(
-                      context,
-                      icon: Icons.chat_bubble_outline,
-                      label: 'AI陪伴',
-                      color: const Color(0xFF4DD0E1),
-                      onTap: () => Navigator.pushNamed(context, '/ai'),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildGradientButton(
-                      context,
-                      text: '10 秒後提醒',
-                      onPressed: () async {
-                        // 測試立即通知
-                        await NotificationService.showNow(
-                          id: 1000,
-                          title: '✅ 測試通知',
-                          body: '這是立即通知',
-                        );
-
-                        // 測試排程 10 秒後的通知
-                        await NotificationService.scheduleAlarmClock(
-                          id: 1001,
-                          title: '⏰ 測試鬧鐘通知',
-                          body: '這是 10 秒後的排程通知',
-                          when: DateTime.now().add(const Duration(seconds: 10)),
-                        );
-                      },
-                    ),
-
-                    _buildGradientButton(
-                      context,
-                      text: '測試：打開心情打卡',
-                      onPressed: _openMoodTester,
-                    ),
                     const SizedBox(height: 12),
+                    _buildQuickActionsBar(context),
+                    const SizedBox(height: 24),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         ),
@@ -387,7 +360,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
 
   Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
@@ -400,29 +373,40 @@ class _MainMenuPageState extends State<MainMenuPage> {
 
           return Row(
             children: [
-              Image.asset('assets/images/memory_icon.png', height: 55),
+              Image.asset('assets/images/memory_icon.png', height: 48),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  '您好，$name',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade700,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '您好，$name',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _nextSoonTaskHint(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF3D5A80),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               GestureDetector(
                 onTap: () => Navigator.pushNamed(context, '/profile'),
                 child: CircleAvatar(
-                  radius: 30,
+                  radius: 26,
                   backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
                       ? NetworkImage(avatarUrl)
                       : const AssetImage('assets/images/default_avatar.png')
-                  as ImageProvider,
-                  onBackgroundImageError: (e, s) {
-                    debugPrint('頭像載入失敗: $e');
-                  },
+                          as ImageProvider,
                 ),
               ),
             ],
@@ -432,96 +416,195 @@ class _MainMenuPageState extends State<MainMenuPage> {
     );
   }
 
-  Widget _buildMenuCard(
-      BuildContext context, {
-        required IconData icon,
-        required String label,
-        required Color color,
-        required VoidCallback onTap,
-      }) {
+  String _nextSoonTaskHint() {
+    // 若要接後端，這裡可查最近的任務時間並格式化。
+    // 先給一行友善提示作為空狀態。
+    return '祝你有美好的一天～';
+  }
+
+  Widget _buildQuickChips(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          height: 100,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.shade300,
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Row(
+        children: [
+          _chip(
+            icon: Icons.mic_rounded,
+            label: '語音輸入',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UserTaskPage()),
+            ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withAlpha((255 * 0.15).toInt()),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 36, color: color),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios, size: 18, color: Colors.grey),
-            ],
+          const SizedBox(width: 10),
+          _chip(
+            icon: Icons.notifications_active,
+            label: '今日提醒',
+            onTap: () async {
+              await NotificationService.showNow(
+                id: 1000,
+                title: '今日提醒',
+                body: '我會在任務時間提醒你喔',
+              );
+            },
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 4)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: Colors.blue.shade700),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1F2937),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildGradientButton(
-      BuildContext context, {
-        required String text,
-        required VoidCallback onPressed,
-      }) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding: EdgeInsets.zero,
-          backgroundColor: Colors.transparent,
-          elevation: 3,
+  Widget _buildToolsGrid(BuildContext context) {
+    final items = [
+      _ToolItem(
+        icon: Icons.calendar_today,
+        color: const Color(0xFF4FC3F7),
+        label: '行事曆',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const UserTaskPage()),
         ),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
+      ),
+      _ToolItem(
+        icon: Icons.photo_album,
+        color: const Color(0xFFBA68C8),
+        label: '回憶錄',
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MemoryPage()),
+        ),
+      ),
+      _ToolItem(
+        icon: Icons.person,
+        color: const Color(0xFF7986CB),
+        label: '個人檔案',
+        onTap: () => Navigator.pushNamed(context, '/profile'),
+      ),
+      _ToolItem(
+        icon: Icons.chat_bubble_outline,
+        color: const Color(0xFF4DD0E1),
+        label: 'AI陪伴',
+        onTap: () => Navigator.pushNamed(context, '/ai'),
+      ),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.4,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, i) => _ToolCard(item: items[i]),
+    );
+  }
+
+  Widget _buildQuickActionsBar(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 6)),
+        ],
+      ),
+      child: Row(
+        children: [
+          _quickBtn(
+            icon: Icons.add,
+            label: '新增任務',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UserTaskPage()),
             ),
-            borderRadius: BorderRadius.circular(12),
           ),
-          child: Container(
-            alignment: Alignment.center,
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 18,
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
+          _divider(),
+          _quickBtn(
+            icon: Icons.today,
+            label: '今天',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UserTaskPage()),
             ),
+          ),
+          _divider(),
+          _quickBtn(
+            icon: Icons.volume_up,
+            label: '播放提醒',
+            onTap: () async {
+              await NotificationService.showNow(
+                id: 2000,
+                title: '今日提醒播報',
+                body: '將為你朗讀接下來的事項',
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _divider() => Container(width: 1, height: 28, color: const Color(0x1F000000));
+
+  Widget _quickBtn({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              Icon(icon, size: 22, color: Colors.blue.shade700),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1F2937))),
+            ],
           ),
         ),
       ),
@@ -529,7 +612,55 @@ class _MainMenuPageState extends State<MainMenuPage> {
   }
 }
 
-// 👇 新增：權限引導的 BottomSheet（保持簡潔）
+class _ToolItem {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+  _ToolItem({required this.icon, required this.color, required this.label, required this.onTap});
+}
+
+class _ToolCard extends StatelessWidget {
+  final _ToolItem item;
+  const _ToolCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: item.onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 6)),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: item.color.withOpacity(.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(item.icon, size: 36, color: item.color),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              item.label,
+              style: const TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF111827)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ExactAlarmPromptSheet extends StatelessWidget {
   const _ExactAlarmPromptSheet();
 
@@ -544,12 +675,15 @@ class _ExactAlarmPromptSheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 16, offset: Offset(0, 6))],
+        boxShadow: const [
+          BoxShadow(color: Color(0x22000000), blurRadius: 16, offset: Offset(0, 6))
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const Text(title,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           const Text(msg, textAlign: TextAlign.center),
           const SizedBox(height: 12),
@@ -565,9 +699,7 @@ class _ExactAlarmPromptSheet extends StatelessWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () async {
-                    // 先請通知權限（如果尚未允許）
                     await NotificationService.requestNotificationPermission();
-                    // 再帶去精準鬧鐘設定頁（讓使用者手動開）
                     await NotificationService.openExactAlarmSettings();
                     if (context.mounted) Navigator.pop(context);
                   },
@@ -581,3 +713,4 @@ class _ExactAlarmPromptSheet extends StatelessWidget {
     );
   }
 }
+
