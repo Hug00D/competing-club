@@ -85,6 +85,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 children: [
                   // 🔵 LOGO 區塊
+                  // 🔵 LOGO 區塊
                   Container(
                     height: 100,
                     width: 100,
@@ -97,6 +98,25 @@ class _LoginPageState extends State<LoginPage> {
                         'assets/images/memory_icon.png',
                         width: 100,
                         height: 100,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+// 🟢 新增 APP 名稱
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF5B8EFF), Color(0xFF49E3D4)], // 藍紫 → 青綠 漸層
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ).createShader(bounds),
+                    child: const Text(
+                      '光時',
+                      style: TextStyle(
+                        fontSize: 50,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white, // 會被漸層覆蓋
+                        letterSpacing: 2,
                       ),
                     ),
                   ),

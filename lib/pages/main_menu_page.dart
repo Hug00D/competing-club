@@ -10,6 +10,7 @@ import 'package:memory/services/mood_service.dart';
 import 'package:memory/pages/mood_checkin_sheet.dart';
 import '../widgets/home_overview_cards.dart';
 import '../widgets/today_summary_panel.dart';
+import '../widgets/safety_quick_card.dart';
 
 class MainMenuPage extends StatefulWidget {
   final String userRole;
@@ -307,6 +308,9 @@ class _MainMenuPageState extends State<MainMenuPage> {
               _buildHeader(context),
               const SizedBox(height: 12),
 
+              const SafetyQuickChip(),
+              const SizedBox(height: 12),
+
               // 中間：2×2 功能區
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -332,6 +336,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
                       onOpenAI: _openAI,
                       onOpenCalendar: _openCalendar,
                       onOpenMemories: _openMemories,
+                      targetUid: FirebaseAuth.instance.currentUser?.uid, // ✅ 統一 UID
                     ),
                   ],
                 ),

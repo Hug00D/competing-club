@@ -22,8 +22,9 @@ class _NavHomePageState extends State<NavHomePage> {
   LatLng? _careReceiverPosition;
   LatLng? _safeZoneCenter;
   double _safeZoneRadius = 300;
-  bool _locationEnabled = false;   // ✅ 從 Firestore safeZone.locationEnabled 帶入
   bool _loading = true;
+  bool _deviceLocationOn = false;   // 裝置定位是否開啟
+  bool _safeZoneMonitoringOn = true; // 是否啟用安全範圍監測（預設 true）
 
 
   @override
@@ -123,41 +124,36 @@ class _NavHomePageState extends State<NavHomePage> {
   Future<void> _loadSafeZone() async {
     debugPrint('🟢 載入 safeZone 資料...');
     try {
-      final docRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.careReceiverUid);
+      final docRef = FirebaseFirestore.instance.collection('users').doc(widget.careReceiverUid);
       final snap = await docRef.get();
       if (!mounted) return;
 
       final data = snap.data() ?? {};
       final zone = Map<String, dynamic>.from(data['safeZone'] ?? {});
 
-      // 兼容 3 種路徑：safeZone.locationEnabled / location.locationEnabled / root.locationEnabled
-      dynamic rawEnabled = zone['locationEnabled'];
-      rawEnabled ??= (data['location'] is Map ? data['location']['locationEnabled'] : null);
-      rawEnabled ??= data['locationEnabled'];
+      // 1) 裝置定位：root 或 nested 只要有一個 true 就算開
+      final rootLocOn   = (data['locationEnabled'] == true);
+      final nestedLocOn = (data['location'] is Map) && (data['location']['locationEnabled'] == true);
+      final deviceLocationOn = rootLocOn || nestedLocOn;
 
-      final bool enabled = (rawEnabled is bool)
-          ? rawEnabled
-          : (rawEnabled?.toString().toLowerCase() == 'true');
+      // 2) 安全範圍監測開關（預設 true，只有明確 false 才關）
+      final safeZoneMonitoringOn = !(zone['locationEnabled'] == false);
 
-      // 圓心/半徑（圓心可無）
+      // 圓心/半徑
       final double? lat = (zone['lat'] is num) ? (zone['lat'] as num).toDouble() : null;
       final double? lng = (zone['lng'] is num) ? (zone['lng'] as num).toDouble() : null;
-      final double radius = (zone['radius'] is num)
-          ? (zone['radius'] as num).toDouble()
-          : 300.0;
+      final double radius = (zone['radius'] is num) ? (zone['radius'] as num).toDouble() : 300.0;
 
       setState(() {
-        _locationEnabled = enabled;                           // ← 只看這個決定是否顯示地圖
-        _safeZoneCenter  = (lat != null && lng != null) ? LatLng(lat, lng) : null;
-        _safeZoneRadius  = radius;
+        _deviceLocationOn     = deviceLocationOn;       // ← 用這個判斷「是否開啟定位」
+        _safeZoneMonitoringOn = safeZoneMonitoringOn;   // ← 用這個控制是否評估在/離開範圍
+        _safeZoneCenter       = (lat != null && lng != null) ? LatLng(lat, lng) : null;
+        _safeZoneRadius       = radius;
       });
 
-      debugPrint('📄 flags: safeZone.locationEnabled=${zone['locationEnabled']} '
-          'root.locationEnabled=${data['locationEnabled']} '
-          'location.locationEnabled=${(data['location'] as Map?)?['locationEnabled']} '
-          '→ enabled=$_locationEnabled, center=$_safeZoneCenter, radius=$_safeZoneRadius');
+      debugPrint('📄 deviceLocationOn=$_deviceLocationOn, '
+          'safeZoneMonitoringOn=$_safeZoneMonitoringOn, '
+          'center=$_safeZoneCenter, radius=$_safeZoneRadius');
     } catch (e) {
       debugPrint('❌ 載入 safeZone 失敗: $e');
     }
@@ -255,10 +251,10 @@ class _NavHomePageState extends State<NavHomePage> {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
-    }
+    } 
 
     final bool hasSafeZone = _safeZoneCenter != null && _safeZoneRadius > 0;
-    final bool canJudgeInside = _locationEnabled && hasSafeZone && _careReceiverPosition != null;
+    final bool canJudgeInside = _deviceLocationOn && hasSafeZone && _careReceiverPosition != null;
     final bool isInside = canJudgeInside
         ? _distanceMeters(_careReceiverPosition!, _safeZoneCenter!) <= _safeZoneRadius
         : false;
@@ -300,7 +296,7 @@ class _NavHomePageState extends State<NavHomePage> {
       ),
 
       // ✅ 只要未開定位 → 整頁只有提示，不渲染地圖
-      body: !_locationEnabled
+      body: !_deviceLocationOn
           ? _noLocationView(name:widget.careReceiverName)
           : (_currentPosition == null)
           ? const Center(child: CircularProgressIndicator())
